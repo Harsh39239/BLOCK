@@ -119,7 +119,7 @@ footer{border-top:1px solid var(--line);padding:36px 0 60px;color:var(--muted);f
 .opt[aria-pressed="true"]{border-color:var(--lime);background:#232617}
 .opt b{display:block;font-size:17px;font-family:var(--display)}
 .opt span{color:var(--muted);font-size:14px}
-input[type=text],input[type=email],input[type=number],input[type=time],textarea,select{width:100%;padding:14px 16px;border-radius:14px;border:1px solid var(--line);background:var(--surface);color:var(--text);font:inherit}
+input[type=text],input[type=email],input[type=password],input[type=number],input[type=time],textarea,select{width:100%;padding:14px 16px;border-radius:14px;border:1px solid var(--line);background:var(--surface);color:var(--text);font:inherit}
 textarea{min-height:88px;resize:vertical}
 input[type=range]{width:100%;accent-color:var(--lime)}
 input[type=checkbox]{accent-color:var(--lime);width:17px;height:17px}
@@ -435,6 +435,18 @@ details.how p{font-size:13px;margin-top:8px}
 .holdbtn[style*="--p"] span{color:var(--text)}
 .mode.open{border-color:var(--line)}
 
+/* ---------- sign up / sign in ---------- */
+.authform{margin-top:18px}
+.authtabs{display:flex;gap:4px;padding:4px;background:var(--surface2);border-radius:999px;overflow:hidden}
+.authtab{flex:1;min-width:0;padding:10px 6px;border-radius:999px;font-size:13px;font-weight:600;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:.15s}
+.authtab[aria-selected="true"]{background:var(--lime);color:var(--lime-ink)}
+.authtab:not([aria-selected="true"]):hover{color:var(--text)}
+.pwrap{position:relative;display:block}
+.pwrap input{padding-right:72px}
+.pweye{position:absolute;right:8px;top:50%;transform:translateY(-50%);padding:8px 12px;border-radius:999px;font-size:13px;font-weight:600;color:var(--muted)}
+.pweye:hover{color:var(--text);background:var(--surface2)}
+@media(max-width:360px){.authtab{font-size:12px;padding:10px 4px}}
+
 /* ---------- accessibility + motion ---------- */
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .linkbtn{color:var(--lime-soft);text-decoration:underline;text-underline-offset:3px;font-weight:600;padding:4px 2px;font-size:inherit}
@@ -607,7 +619,7 @@ async function initCloud() {
    overwritten: sessions, urges and badges are combined; settings take the
    newer copy. Talks to Supabase's REST API directly, no extra library. */
 const AUTH_KEY = "block.auth";
-const ACCOUNT = { session: null, email: "", userId: "", status: "idle", lastSync: 0, sent: "", pushTimer: null, busy: false, lastPull: 0 };
+const ACCOUNT = { session: null, email: "", userId: "", status: "idle", lastSync: 0, sent: "", pushTimer: null, busy: false, lastPull: 0, mode: "in" };
 try { const a = JSON.parse(localStorage.getItem(AUTH_KEY) || "null"); if (a && a.session) Object.assign(ACCOUNT, { session: a.session, email: a.email || "", userId: a.userId || "" }); } catch (e) {}
 function storeAuth() {
   try {
@@ -769,30 +781,129 @@ function accountCardHTML() {
     <div class="row" style="margin-top:12px;flex-wrap:wrap"><button class="btn btn-ghost btn-sm" id="acct-sync">Sync now</button><button class="btn btn-ghost btn-sm" id="acct-out">Sign out</button></div>
   </section>`;
   return `<section class="card" style="margin-top:12px" aria-labelledby="acct-h">
-    <b id="acct-h">Sync across devices</b>
-    <p class="muted" style="font-size:14px;margin-top:6px">Sign in with your email to keep sessions, streaks and settings on every phone and laptop, and to keep them safe if this browser is cleared. No password.</p>
+    <b id="acct-h">Account</b>
+    <p class="muted" style="font-size:14px;margin-top:6px">Sign in to keep your sessions, streaks and settings on every device, and to keep them safe if this browser is cleared.</p>
     ${signInFormHTML()}
   </section>`;
 }
+
+/* ---------- sign up / sign in ----------
+   Three ways in, one form: create an account with a password, sign in with it,
+   or have a one-time link emailed instead. */
+async function authPost(path, body) {
+  const r = await fetch(SB.url + path, {
+    method: "POST", headers: { apikey: SB.key, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  let d = {}; try { d = await r.json(); } catch (e) {}
+  return { ok: r.ok, status: r.status, code: d.error_code || d.code || "", msg: d.msg || d.message || d.error_description || "", data: d };
+}
+// Turn a token response into a signed-in session on this device.
+function adoptSession(d) {
+  if (!d || !d.access_token) return false;
+  ACCOUNT.session = {
+    access_token: d.access_token, refresh_token: d.refresh_token,
+    expires_at: d.expires_at || Math.floor(Date.now() / 1000) + (d.expires_in || 3600),
+  };
+  ACCOUNT.email = (d.user && d.user.email) || ACCOUNT.email || "";
+  ACCOUNT.userId = (d.user && d.user.id) || ACCOUNT.userId || "";
+  storeAuth();
+  return true;
+}
+function authErrorText(res, mode) {
+  const m = (res.msg || "").toLowerCase(), c = (res.code || "").toLowerCase();
+  if (res.status === 429 || c === "over_email_send_rate_limit") return "Too many tries just now. Wait a few minutes.";
+  if (c === "user_already_exists" || /already registered|already exists/.test(m)) return "That email already has an account. Switch to Sign in.";
+  if (c === "invalid_credentials" || /invalid login/.test(m)) return "That email and password don't match. Check them, or use an email link instead.";
+  if (c === "email_not_confirmed" || /not confirmed/.test(m)) return "Confirm your email first — open the link we sent you. Or sign in with an email link instead.";
+  if (c === "weak_password" || /password.*(6|least|short)/.test(m)) return "Use a password of at least 6 characters.";
+  if (/not authorized|not allowed/.test(m)) return "BLOCK can't email this address yet while email sending is being set up.";
+  if (c === "email_address_invalid" || /address.*invalid|invalid.*address/.test(m)) return "That email address was rejected. Check the spelling, or use another address.";
+  if (/signups not allowed|disabled/.test(m)) return "New accounts are closed right now. Try an email link instead.";
+  return res.msg ? res.msg.charAt(0).toUpperCase() + res.msg.slice(1) : "That didn't work. Try again in a moment.";
+}
 function signInFormHTML() {
-  return `<form class="eaform" id="acct-form" novalidate style="max-width:none">
-    <label for="acct-mail">Email</label>
-    <div class="row"><input type="email" id="acct-mail" name="email" autocomplete="email" inputmode="email" placeholder="you@email.com" required value="${esc(ACCOUNT.sent)}"><button class="btn btn-lime btn-sm" type="submit">Email me a link</button></div>
-    <p class="eamsg" id="acct-msg" role="status">${ACCOUNT.sent ? "Link sent to " + esc(ACCOUNT.sent) + ". Open it on this device." : ""}</p>
+  const mode = ACCOUNT.mode || "in";
+  const tabs = [["in", "Sign in"], ["up", "Create account"], ["link", "Email me a link"]];
+  const pwMode = mode !== "link";
+  return `<form id="acct-form" class="authform" novalidate>
+    <div class="authtabs" role="tablist" aria-label="How to sign in">${tabs.map(([k, l]) =>
+      `<button type="button" role="tab" class="authtab" data-authmode="${k}" aria-selected="${mode === k}">${l}</button>`).join("")}</div>
+    <div class="q" style="margin-top:16px"><label for="acct-mail">Email</label>
+      <input type="email" id="acct-mail" name="email" autocomplete="email" inputmode="email" placeholder="you@email.com" required value="${esc(ACCOUNT.sent)}"></div>
+    ${pwMode ? `<div class="q"><label for="acct-pw">Password</label>
+      <div class="pwrap"><input type="password" id="acct-pw" name="password" autocomplete="${mode === "up" ? "new-password" : "current-password"}" minlength="6" placeholder="${mode === "up" ? "At least 6 characters" : "Your password"}" required>
+      <button type="button" class="pweye" id="acct-eye" aria-label="Show password" aria-pressed="false">Show</button></div></div>` : ""}
+    <p class="eamsg" id="acct-msg" role="status"></p>
+    <button class="btn btn-lime" style="width:100%;margin-top:14px" type="submit">${mode === "up" ? "Create account" : mode === "link" ? "Email me a link" : "Sign in"}</button>
+    <p class="why" style="margin-top:10px;text-align:center">${mode === "link"
+      ? "We'll email a one-time link. No password needed."
+      : mode === "up" ? "Your BLOCK data on this device comes with you." : "Forgot it? Use “Email me a link” instead."}</p>
   </form>`;
 }
 function bindSignInForm() {
   const f = $("#acct-form"); if (!f) return;
+  const msg = $("#acct-msg");
+  const say = (text, bad) => { msg.classList.toggle("bad", !!bad); msg.textContent = text; };
+
+  $$(".authtab", f).forEach(b => b.onclick = () => {
+    ACCOUNT.mode = b.dataset.authmode;
+    const mail = f.elements.email.value;
+    f.outerHTML = signInFormHTML();     // swap just the form, leave the heading alone
+    bindSignInForm();
+    const m = $("#acct-mail"); if (m) m.value = mail;
+    const tab = $(`.authtab[data-authmode="${ACCOUNT.mode}"]`); if (tab) tab.focus();
+  });
+
+  const eye = $("#acct-eye");
+  if (eye) eye.onclick = () => {
+    const p = $("#acct-pw"), show = p.type === "password";
+    p.type = show ? "text" : "password";
+    eye.textContent = show ? "Hide" : "Show";
+    eye.setAttribute("aria-pressed", show);
+    eye.setAttribute("aria-label", show ? "Hide password" : "Show password");
+  };
+
   f.onsubmit = async e => {
     e.preventDefault();
-    const v = f.elements.email.value.trim(), msg = $("#acct-msg"), btn = $("button[type=submit]", f);
-    msg.classList.remove("bad");
-    if (!EMAIL_RE.test(v)) { msg.classList.add("bad"); msg.textContent = "That email doesn't look right."; return f.elements.email.focus(); }
-    btn.disabled = true; msg.textContent = "Sending…";
-    let res; try { res = await sendSignInLink(v); } catch (err) { res = { ok: false, msg: "You seem to be offline. Try again when you're connected." }; }
-    btn.disabled = false;
-    if (!res.ok) { msg.classList.add("bad"); msg.textContent = res.msg; return; }
-    msg.textContent = "Link sent to " + v + ". Open it on this device to finish signing in. Check spam if it's not there in a minute.";
+    const mode = ACCOUNT.mode || "in";
+    const email = f.elements.email.value.trim();
+    const pw = f.elements.password ? f.elements.password.value : "";
+    const btn = $("button[type=submit]", f);
+    say("");
+    if (!EMAIL_RE.test(email)) { say("That email doesn't look right.", true); return f.elements.email.focus(); }
+    if (mode !== "link" && pw.length < 6) { say("Use a password of at least 6 characters.", true); return f.elements.password.focus(); }
+
+    btn.disabled = true;
+    const label = btn.textContent;
+    btn.textContent = mode === "link" ? "Sending…" : mode === "up" ? "Creating…" : "Signing in…";
+    let res;
+    try {
+      if (mode === "link") res = await sendSignInLink(email);
+      else if (mode === "up") res = await authPost("/auth/v1/signup?redirect_to=" + encodeURIComponent(authReturnUrl()), { email: email, password: pw });
+      else res = await authPost("/auth/v1/token?grant_type=password", { email: email, password: pw });
+    } catch (err) {
+      res = { ok: false, offline: true };
+    }
+    btn.disabled = false; btn.textContent = label;
+
+    if (res.offline) return say("You seem to be offline. Try again when you're connected.", true);
+    if (!res.ok) return say(mode === "link" ? res.msg : authErrorText(res, mode), true);
+
+    if (mode === "link") {
+      ACCOUNT.sent = email;
+      return say("Link sent to " + email + ". Open it on this device to finish signing in. Check spam if it's not there in a minute.");
+    }
+    if (adoptSession(res.data)) {
+      closeOverlay();
+      toast(mode === "up" ? "Account created. Sync is on." : "Signed in as " + (ACCOUNT.email || email) + ".");
+      const changed = await pullAccount(true);
+      if (S.user && S.profile && !route().startsWith("app/")) return go("app/home");
+      render();
+      return;
+    }
+    // Signed up, but the project asks people to confirm their email first.
+    say("Account created. Open the confirmation link we just emailed to " + email + ", then come back here.");
   };
 }
 
@@ -1169,7 +1280,11 @@ function render() {
   applyTheme(r);
   const root = $("#root");
   if (r === "landing") { root.innerHTML = landing(); bindLanding(); }
-  else if (r === "auth") return go(S.profile ? "app/home" : "onboarding");   // old links
+  else if (r === "auth") {
+    if (ACCOUNT.session) return go(S.user && S.profile ? "app/home" : "onboarding");
+    root.innerHTML = authView(); bindSignInForm();
+    $("#auth-skip").onclick = () => go(S.user && S.profile ? "app/home" : (S.user ? "onboarding" : "landing"));
+  }
   else if (r === "onboarding") { if (S.user && S.profile) return go("app/home"); renderOB(); }
   else if (r.startsWith("app/")) {
     if (!S.user || !S.profile) return go("onboarding");
@@ -1226,7 +1341,7 @@ function landing() {
   <header class="nav" id="nav"><div class="wrap">
     <span class="logo">BLOCK</span>
     <nav class="nav-links"><a href="#why">Why it works</a><a href="#how">How it works</a><a href="#kit">What you get</a><a href="#buy">Price</a></nav>
-    <button class="btn btn-lime btn-sm" id="l-start">Open the app</button>
+    <span class="row" style="gap:8px"><button class="btn btn-ghost btn-sm" id="l-signin">Sign in</button><button class="btn btn-lime btn-sm" id="l-start">Open the app</button></span>
   </div></header>
 
   <section class="hero"><div class="wrap hero-grid">
@@ -1403,6 +1518,7 @@ function landing() {
 function bindLanding() {
   const start = () => go(S.user && S.profile ? "app/home" : "onboarding");
   ["#l-start", "#l-try", "#f-app"].forEach(id => { const el = $(id); if (el) el.onclick = e => { e.preventDefault(); start(); }; });
+  const si = $("#l-signin"); if (si) si.onclick = e => { e.preventDefault(); go("auth"); };
   // "Pre-order" buttons in the hero and sticky bar take you to the price card;
   // the price card's own button opens the reservation form.
   ["#l-start2", "#l-buy2"].forEach(id => { const el = $(id); if (el) el.onclick = e => {
@@ -1557,6 +1673,18 @@ function bindLanding() {
   }
 }
 
+/* ---------- sign in / create account screen ---------- */
+function authView() {
+  return `<div class="screen"><div class="ob">
+    <div class="row between"><p class="logo" style="font-size:16px">BLOCK</p>
+      <button class="linkbtn" id="auth-skip">${S.user && S.profile ? "Back to the app" : "Skip for now"}</button></div>
+    <h2 style="margin-top:26px">Your BLOCK account</h2>
+    <p class="muted">Keeps your sessions, streaks and settings on every device, and safe if this browser is cleared.</p>
+    ${signInFormHTML()}
+    <p class="note">BLOCK stores your focus sessions and settings, nothing else. You can export or erase them any time.</p>
+  </div></div>`;
+}
+
 /* ---------- onboarding ---------- */
 // Two steps: pick apps (popular ones pre-picked), then pair. Everything else
 // (hours baseline, goal, modes, schedules) has sensible defaults and lives in
@@ -1652,9 +1780,10 @@ function finishOB() {
   S.puck = { id: p.id, method: p.method, name: d.puckName, paired: Date.now() };
   addXP(40); save(); OB.step = 0; go("app/home");
 }
-function openSignIn() {
-  overlay(`<h2 id="ov-title">Sign in</h2>
-    <p class="muted">We'll email you a link. Open it on this device and your sessions, streaks and settings come across.</p>
+function openSignIn(mode) {
+  ACCOUNT.mode = mode || ACCOUNT.mode || "in";
+  overlay(`<h2 id="ov-title">Your BLOCK account</h2>
+    <p class="muted">Sign in and your sessions, streaks and settings come across to this device.</p>
     ${signInFormHTML()}`);
   bindSignInForm();
 }

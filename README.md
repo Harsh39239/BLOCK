@@ -35,7 +35,13 @@
   - Option to hide the session clock.
 - **More than one puck** per phone (desk, bedroom...). Any paired puck unlocks; anyone else's is refused. One puck can be shared by a household.
 - **Schedule quick-adds:** Bedtime, Study evenings and Work day in one tap.
-- **Accounts and sync** (Profile → Sync across devices): passwordless email sign-in link. Each person's data sits in one row of `user_state` that only they can read or write. Two devices are merged, never overwritten.
+- **Accounts:** sign in from the landing page's **Sign in** button, during setup, or in Profile. Three ways in from one form:
+  - create an account with email + password;
+  - sign in with email + password;
+  - have a one-time link emailed instead (no password).
+
+  Each person's data sits in one row of `user_state` that only they can read or write. Two devices are merged, never overwritten.
+- **Email on every new pre-order or sign-up.** A Postgres trigger calls the `notify-signup` Edge Function through pg_net, which sends two emails: a notification to the BLOCK inbox and an automatic reply to the person. The row is stamped `notified_at` as it is claimed, so nobody is ever emailed twice. See `supabase/functions/notify-signup/index.ts`.
 - **Insights:**
   - time won back (an estimate from the "hours a day" baseline, which can be changed in Profile);
   - this week vs last week;
@@ -48,6 +54,23 @@
   - The 3D puck works with Enter or Space.
   - Toasts are announced to screen readers.
   - Animations respect reduced-motion settings.
+
+## Turning the emails on (one time, in the Supabase dashboard)
+
+The trigger, the function and the database are all deployed and tested. They just need an email
+sender, which is the one part that needs an account of your own.
+
+1. Create a free account at [resend.com](https://resend.com) and copy an API key.
+2. In Supabase → **Edge Functions → Secrets**, add:
+   - `RESEND_API_KEY` — the key you just copied;
+   - `OWNER_EMAIL` — where notifications should land;
+   - `FROM_EMAIL` *(optional)* — only once you've verified a domain with Resend. Until then leave it
+     out and it uses Resend's shared test sender.
+3. Submit the form on the live site and both emails go out.
+
+Without a verified domain of your own, Resend only delivers to the address that owns the Resend
+account, which is enough to demo both emails. To email anyone, verify a domain in Resend and set
+`FROM_EMAIL` to an address on it.
 
 ## Supabase setup for sign-in (one time, in the dashboard)
 
