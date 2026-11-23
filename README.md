@@ -21,7 +21,33 @@
   - **NFC tap**: Chrome on Android, over HTTPS. The tag's ID becomes the only key; other tags are refused.
   - **QR code** on the puck's base, using the camera. Works on Android Chrome.
   - **Demo puck**: click it on screen. This is for desktops and people without a puck yet. Once a real puck is paired, the demo click stops working.
-- **Sessions, streaks, stats, modes, strict mode, emergency unlocks** are stored on the device (and in a signed-in Claude account when available).
+- **Sessions, streaks, stats, modes, strict mode, emergency unlocks** are stored on the device.
+- **Accounts and sync** (Profile → Sync across devices): passwordless email sign-in link. Each person's data sits in one row of `user_state` that only they can read or write. Two devices are merged, never overwritten.
+- **Insights:**
+  - time won back (an estimate from the "hours a day" baseline, which can be changed in Profile);
+  - this week vs last week;
+  - when you lock (morning, afternoon, evening, night);
+  - urges resisted (logged from Home, or "Actually, I'll stay locked" in the unlock dialog);
+  - a shareable streak card.
+- **Appearance:** Dark, Light or Match my phone for app screens. The landing page stays dark.
+- **Accessibility:**
+  - Dialogs are labelled, hold keyboard focus, close with Escape, and return focus to whatever opened them.
+  - The 3D puck works with Enter or Space.
+  - Toasts are announced to screen readers.
+  - Animations respect reduced-motion settings.
+
+## Supabase setup for sign-in (one time, in the dashboard)
+
+Sign-in emails need two settings that can't be changed from this repo:
+
+1. **Authentication → URL Configuration**
+   - Site URL: `https://harsh39239.github.io/BLOCK/block.html`
+   - Redirect URLs: add `https://harsh39239.github.io/BLOCK/**`, plus `http://localhost:4317/**` for local testing.
+
+   Without this, the link in the email goes to `localhost:3000` and sign-in fails.
+2. **Authentication → Emails → SMTP Settings**: before real users sign in, connect your own email sender (for example Resend, Postmark or Amazon SES).
+   - Supabase's built-in sender only delivers to members of your Supabase team, and only a few emails an hour.
+   - Until then, sign-in works for your own address only.
 - **Schedules** lock and unlock on time while BLOCK is open, with notifications if allowed.
 - **Install as an app** from Chrome ("Install BLOCK" in Profile, or the browser menu). The installed app opens offline.
 - **Responsive**: tested with no sideways scrolling at 320, 375, 414, 768, 1024 and 1440 px wide.

@@ -16,7 +16,7 @@
 <style>
 :root{
   --ink:#121311;--surface:#1b1d19;--surface2:#242721;--line:#32352d;
-  --text:#f2f0e8;--muted:#a3a699;--lime:#c6ff3d;--lime-soft:#c6ff3d;--lime-ink:#10140a;--warn:#ffb86b;
+  --text:#f2f0e8;--muted:#a3a699;--lime:#c6ff3d;--lime-soft:#c6ff3d;--lime-ink:#10140a;--warn:#ffb86b;--ring:#c6ff3d;--tabbar:rgba(18,19,17,.94);
   --display:"Bricolage Grotesque","Arial Narrow",system-ui,sans-serif;
   --body:"Instrument Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
   box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
@@ -381,6 +381,51 @@ input[type=time]{-webkit-appearance:none;appearance:none;min-height:50px}
   .nav .btn-sm{padding:8px 12px;font-size:13px}
 }
 @media(min-width:1400px){.wrap{max-width:1180px}}
+
+/* ---------- light theme (app screens only; set on <html data-theme>) ---------- */
+:root[data-theme="light"]{
+  --ink:#f4f3ee;--surface:#ffffff;--surface2:#e9e8e1;--line:#d9d8cf;
+  --text:#161714;--muted:#575a50;--lime-soft:#3d6600;--warn:#a34a00;--ring:#8fd400;--tabbar:rgba(244,243,238,.94);
+  color-scheme:light;
+}
+:root[data-theme="light"] :focus-visible{outline-color:#3d6600}
+:root[data-theme="light"] .eyebrow,:root[data-theme="light"] .eamsg{color:var(--lime-soft)}
+:root[data-theme="light"] .opt[aria-pressed="true"]{background:#eef8d6}
+:root[data-theme="light"] .btn-ghost:hover{border-color:#b9b8ae;background:var(--surface2)}
+:root[data-theme="light"] .toast{box-shadow:0 12px 34px rgba(0,0,0,.14)}
+:root[data-theme="light"] .ovbg{background:rgba(20,21,18,.45)}
+:root[data-theme="light"] .tab.act span.disc{box-shadow:0 6px 20px rgba(110,160,0,.35)}
+.tabbar{background:var(--tabbar)}
+.bars i,.progress b{background:var(--ring)}
+input[type=range]{accent-color:var(--ring)}
+
+/* ---------- insights ---------- */
+.bignow{font:800 clamp(44px,12vw,64px)/1 var(--display);letter-spacing:-.04em;margin:4px 0 10px}
+.delta{display:inline-block;margin-top:12px;font-size:13px;font-weight:600;color:var(--lime-soft);background:rgba(198,255,61,.13);border-radius:999px;padding:5px 11px}
+.delta.down{color:var(--warn);background:rgba(255,184,107,.13)}
+details.how{border:0;padding:0;margin-top:12px}
+details.how summary{font-size:13px;font-weight:500;color:var(--muted)}
+details.how p{font-size:13px;margin-top:8px}
+.hbars{display:grid;gap:10px;margin-top:14px}
+.hbar{display:grid;grid-template-columns:84px minmax(0,1fr) 58px;align-items:center;gap:10px;font-size:13px}
+.hbar i{height:10px;border-radius:6px;background:var(--surface2);overflow:hidden;display:block}
+.hbar b{display:block;height:100%;background:var(--ring);border-radius:6px}
+.hbar em{font-style:normal;color:var(--muted);text-align:right}
+.urgelist{list-style:none;margin:12px 0 0;padding:0}
+.urgelist li{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-top:1px solid var(--line);font-size:14px}
+.chip.earned{background:var(--lime);color:var(--lime-ink);border-color:var(--lime);font-weight:600}
+
+/* ---------- accessibility + motion ---------- */
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.linkbtn{color:var(--lime-soft);text-decoration:underline;text-underline-offset:3px;font-weight:600;padding:4px 2px;font-size:inherit}
+canvas.pcanvas:focus-visible{outline:2px solid var(--lime);outline-offset:4px;border-radius:24px}
+@keyframes viewin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes sheet{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:none}}
+.app,.screen{animation:viewin .32s cubic-bezier(.22,1,.36,1)}
+.ov{animation:sheet .28s cubic-bezier(.22,1,.36,1)}
+@keyframes toastin{from{opacity:0;transform:translate(-50%,12px)}to{opacity:1;transform:translate(-50%,0)}}
+.toast{animation:toastin .22s ease-out}
+@media(prefers-reduced-motion:reduce){.app,.screen,.ov,.toast{animation:none}}
 @media(max-height:560px) and (orientation:landscape){.stage{max-width:300px}.ovbg{align-items:center}.ov{max-height:96vh}}
 @media(max-width:600px){.promo .slides{min-height:150px}.slide{padding:0 16px 44px}}
 
@@ -408,7 +453,7 @@ input[type=time]{-webkit-appearance:none;appearance:none;min-height:50px}
 <body>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <div id="root"></div>
-<div id="toast-slot"></div>
+<div id="toast-slot" role="status" aria-live="polite"></div>
 
 <script>
 /* ============================================================
@@ -445,13 +490,18 @@ function blank() {
     lock: null, sessions: [], schedule: [], strict: false,
     emergency: { month: "", used: 0 }, streakStart: 0, longest: 0,
     xp: 0, claimed: [], plan: "free", demo: false,
+    urges: [],            // { at, mode } each time you felt the pull and stayed locked
+    theme: "dark",        // app screens: "dark" | "light" | "system" (the landing page stays dark)
+    updatedAt: 0,         // last local change, used to merge with the synced copy
   };
 }
 let S = load();
 function load() { try { return Object.assign(blank(), JSON.parse(localStorage.getItem(KEY) || "{}")); } catch (e) { return blank(); } }
 function save(localOnly) {
+  if (!localOnly) S.updatedAt = Date.now();
   try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {}
   if (!localOnly && CLOUD.db && CLOUD.uid) queueCloud();
+  if (!localOnly) queueAccountPush();
 }
 
 /* ---------- cloud sync ---------- */
@@ -490,6 +540,201 @@ async function initCloud() {
   } catch (e) { setStatus("error"); }
 }
 
+/* ---------- account: email sign-in link + sync across devices (Supabase) ----------
+   Sign-in is passwordless: we email a link; opening it lands back here with the
+   session in the address (#access_token=...), which we read and then remove.
+   Each person's whole app state lives in one row of public.user_state that only
+   they can read or write (row-level security). Two devices are merged, never
+   overwritten: sessions, urges and badges are combined; settings take the
+   newer copy. Talks to Supabase's REST API directly, no extra library. */
+const AUTH_KEY = "block.auth";
+const ACCOUNT = { session: null, email: "", userId: "", status: "idle", lastSync: 0, sent: "", pushTimer: null, busy: false, lastPull: 0 };
+try { const a = JSON.parse(localStorage.getItem(AUTH_KEY) || "null"); if (a && a.session) Object.assign(ACCOUNT, { session: a.session, email: a.email || "", userId: a.userId || "" }); } catch (e) {}
+function storeAuth() {
+  try {
+    if (ACCOUNT.session) localStorage.setItem(AUTH_KEY, JSON.stringify({ session: ACCOUNT.session, email: ACCOUNT.email, userId: ACCOUNT.userId }));
+    else localStorage.removeItem(AUTH_KEY);
+  } catch (e) {}
+}
+function setAccountStatus(st) {
+  ACCOUNT.status = st; if (st === "synced") ACCOUNT.lastSync = Date.now();
+  const el = $("#acct-status"); if (el) el.textContent = accountStatusText();
+}
+function accountStatusText() {
+  if (ACCOUNT.status === "syncing") return "Syncing…";
+  if (ACCOUNT.status === "offline") return "Offline. Changes will sync when you're back online.";
+  if (ACCOUNT.status === "error") return "Couldn't sync just now. It will try again.";
+  if (ACCOUNT.lastSync) { const m = Math.round((Date.now() - ACCOUNT.lastSync) / 60000); return "Synced " + (m < 1 ? "just now" : m + " min ago"); }
+  return "Signed in";
+}
+async function refreshSession() {
+  const r = await fetch(SB.url + "/auth/v1/token?grant_type=refresh_token", {
+    method: "POST", headers: { apikey: SB.key, "Content-Type": "application/json" },
+    body: JSON.stringify({ refresh_token: ACCOUNT.session.refresh_token }),
+  });
+  if (r.status === 400 || r.status === 401 || r.status === 403) { signOutLocal("Your sign-in expired. Sign in again to keep syncing."); throw new Error("expired"); }
+  if (!r.ok) throw new Error("refresh " + r.status);
+  const d = await r.json();
+  ACCOUNT.session = { access_token: d.access_token, refresh_token: d.refresh_token, expires_at: d.expires_at || Math.floor(Date.now() / 1000) + (d.expires_in || 3600) };
+  storeAuth();
+}
+async function authed(path, opts) {
+  if (!ACCOUNT.session) throw new Error("signed out");
+  if ((ACCOUNT.session.expires_at || 0) * 1000 - 60000 < Date.now()) await refreshSession();
+  opts = opts || {};
+  opts.headers = Object.assign({ apikey: SB.key, Authorization: "Bearer " + ACCOUNT.session.access_token, "Content-Type": "application/json" }, opts.headers || {});
+  let r = await fetch(SB.url + path, opts);
+  if (r.status === 401) { await refreshSession(); opts.headers.Authorization = "Bearer " + ACCOUNT.session.access_token; r = await fetch(SB.url + path, opts); }
+  return r;
+}
+function signOutLocal(msg) {
+  ACCOUNT.session = null; ACCOUNT.email = ""; ACCOUNT.userId = ""; ACCOUNT.status = "idle"; ACCOUNT.lastSync = 0;
+  clearTimeout(ACCOUNT.pushTimer); storeAuth();
+  if (msg) setTimeout(() => toast(msg), 50);
+}
+async function signOut() {
+  try { await authed("/auth/v1/logout", { method: "POST" }); } catch (e) {}
+  signOutLocal("Signed out. This device keeps its data.");
+  render();
+}
+// Where the emailed link should bring people back to (this exact page).
+const authReturnUrl = () => location.origin + location.pathname;
+async function sendSignInLink(email) {
+  const r = await fetch(SB.url + "/auth/v1/otp?redirect_to=" + encodeURIComponent(authReturnUrl()), {
+    method: "POST", headers: { apikey: SB.key, "Content-Type": "application/json" },
+    body: JSON.stringify({ email: email, create_user: true }),
+  });
+  if (r.ok) { ACCOUNT.sent = email; return { ok: true }; }
+  let msg = ""; try { const d = await r.json(); msg = d.msg || d.message || d.error_description || ""; } catch (e) {}
+  if (r.status === 429) return { ok: false, msg: "Too many sign-in emails just now. Wait a few minutes and try again." };
+  if (/not authorized|not allowed/i.test(msg)) return { ok: false, msg: "Sign-in emails can't go to this address yet. BLOCK's email sending is still being set up." };
+  return { ok: false, msg: msg ? "Couldn't send the link: " + msg : "Couldn't send the link. Check the address and try again." };
+}
+// Called before the first render: picks the session out of the address after the emailed link is opened.
+function takeAuthFromUrl() {
+  const h = location.hash;
+  if (!/access_token=|error_description=/.test(h)) return false;
+  const p = new URLSearchParams(h.slice(1));
+  if (p.get("error_description")) {
+    const why = p.get("error_description").replace(/\+/g, " ");
+    history.replaceState(null, "", location.pathname + location.search + (S.user ? "#app/profile" : "#landing"));
+    setTimeout(() => toast(/expired|invalid/i.test(why) ? "That sign-in link has expired. Send yourself a new one." : "Sign-in didn't work: " + why), 300);
+    return false;
+  }
+  ACCOUNT.session = {
+    access_token: p.get("access_token"), refresh_token: p.get("refresh_token"),
+    expires_at: +p.get("expires_at") || Math.floor(Date.now() / 1000) + (+p.get("expires_in") || 3600),
+  };
+  try { const payload = JSON.parse(atob(ACCOUNT.session.access_token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))); ACCOUNT.userId = payload.sub || ""; ACCOUNT.email = payload.email || ""; } catch (e) {}
+  storeAuth();
+  history.replaceState(null, "", location.pathname + location.search + "#app/home");
+  return true;
+}
+// Merge two copies of the app state without losing anything.
+function mergeStates(local, remote) {
+  if (!remote || !remote.user) return local;
+  if (!local || !local.user) return Object.assign(blank(), remote);
+  const newer = (remote.updatedAt || 0) > (local.updatedAt || 0) ? remote : local;
+  const out = Object.assign(blank(), newer);
+  const byKey = (arr, key) => { const m = new Map(); arr.forEach(x => m.set(key(x), x)); return [...m.values()]; };
+  out.sessions = byKey([...(local.sessions || []), ...(remote.sessions || [])], s => s.start + "|" + s.mode).sort((a, b) => a.start - b.start);
+  out.urges = byKey([...(local.urges || []), ...(remote.urges || [])], u => String(u.at)).sort((a, b) => a.at - b.at);
+  out.claimed = [...new Set([...(local.claimed || []), ...(remote.claimed || [])])];
+  out.xp = Math.max(local.xp || 0, remote.xp || 0);
+  out.longest = Math.max(local.longest || 0, remote.longest || 0);
+  const le = local.emergency || {}, re = remote.emergency || {};
+  if (le.month && le.month === re.month) out.emergency = { month: le.month, used: Math.max(le.used || 0, re.used || 0) };
+  out.demo = !!(local.demo || remote.demo);
+  out.updatedAt = Math.max(local.updatedAt || 0, remote.updatedAt || 0);
+  return out;
+}
+function queueAccountPush() {
+  if (!ACCOUNT.session || !S.user) return;
+  clearTimeout(ACCOUNT.pushTimer);
+  ACCOUNT.pushTimer = setTimeout(pushAccount, 1500);
+}
+async function pushAccount() {
+  if (!ACCOUNT.session || !S.user) return;
+  if (ACCOUNT.busy) return queueAccountPush();
+  ACCOUNT.busy = true; setAccountStatus("syncing");
+  try {
+    const r = await authed("/rest/v1/user_state?on_conflict=user_id", {
+      method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+      body: JSON.stringify({ user_id: ACCOUNT.userId || undefined, state: S, updated_at: new Date(S.updatedAt || Date.now()).toISOString() }),
+    });
+    setAccountStatus(r.ok ? "synced" : "error");
+    if (!r.ok) ACCOUNT.pushTimer = setTimeout(pushAccount, 15000);
+  } catch (e) {
+    if (ACCOUNT.session) { setAccountStatus(navigator.onLine === false ? "offline" : "error"); ACCOUNT.pushTimer = setTimeout(pushAccount, 15000); }
+  }
+  ACCOUNT.busy = false;
+}
+async function pullAccount(force) {
+  if (!ACCOUNT.session || ACCOUNT.busy) return;
+  if (!force && Date.now() - ACCOUNT.lastPull < 30000) return;
+  ACCOUNT.busy = true; ACCOUNT.lastPull = Date.now(); setAccountStatus("syncing");
+  let changed = false;
+  try {
+    if (!ACCOUNT.email || !ACCOUNT.userId) {
+      const u = await authed("/auth/v1/user");
+      if (u.ok) { const d = await u.json(); ACCOUNT.email = d.email || ""; ACCOUNT.userId = d.id || ""; storeAuth(); }
+    }
+    const r = await authed("/rest/v1/user_state?select=state,updated_at");
+    if (!r.ok) throw new Error("pull " + r.status);
+    const rows = await r.json();
+    const remote = rows[0] && rows[0].state;
+    const before = JSON.stringify(S);
+    S = mergeStates(S, remote);
+    changed = JSON.stringify(S) !== before;
+    if (changed) save(true);
+    ACCOUNT.busy = false;
+    setAccountStatus("synced");
+    if (S.user && (!remote || changed || (remote.updatedAt || 0) < (S.updatedAt || 0))) pushAccount();
+  } catch (e) {
+    ACCOUNT.busy = false;
+    if (ACCOUNT.session) setAccountStatus(navigator.onLine === false ? "offline" : "error");
+  }
+  return changed;
+}
+async function deleteAccountData() {
+  if (!ACCOUNT.session) return;
+  try { await authed("/rest/v1/user_state?user_id=eq." + encodeURIComponent(ACCOUNT.userId), { method: "DELETE" }); } catch (e) {}
+}
+function accountCardHTML() {
+  if (ACCOUNT.session) return `<section class="card" style="margin-top:12px" aria-labelledby="acct-h">
+    <div class="row between"><div><b id="acct-h">Account</b>
+      <p class="muted" style="font-size:13px;margin-top:3px">${esc(ACCOUNT.email || "Signed in")}</p></div><span class="tag on">Sync on</span></div>
+    <p class="muted" style="font-size:13px;margin-top:10px" id="acct-status" role="status">${accountStatusText()}</p>
+    <div class="row" style="margin-top:12px;flex-wrap:wrap"><button class="btn btn-ghost btn-sm" id="acct-sync">Sync now</button><button class="btn btn-ghost btn-sm" id="acct-out">Sign out</button></div>
+  </section>`;
+  return `<section class="card" style="margin-top:12px" aria-labelledby="acct-h">
+    <b id="acct-h">Sync across devices</b>
+    <p class="muted" style="font-size:14px;margin-top:6px">Sign in with your email to keep sessions, streaks and settings on every phone and laptop, and to keep them safe if this browser is cleared. No password.</p>
+    ${signInFormHTML()}
+  </section>`;
+}
+function signInFormHTML() {
+  return `<form class="eaform" id="acct-form" novalidate style="max-width:none">
+    <label for="acct-mail">Email</label>
+    <div class="row"><input type="email" id="acct-mail" name="email" autocomplete="email" inputmode="email" placeholder="you@email.com" required value="${esc(ACCOUNT.sent)}"><button class="btn btn-lime btn-sm" type="submit">Email me a link</button></div>
+    <p class="eamsg" id="acct-msg" role="status">${ACCOUNT.sent ? "Link sent to " + esc(ACCOUNT.sent) + ". Open it on this device." : ""}</p>
+  </form>`;
+}
+function bindSignInForm() {
+  const f = $("#acct-form"); if (!f) return;
+  f.onsubmit = async e => {
+    e.preventDefault();
+    const v = f.elements.email.value.trim(), msg = $("#acct-msg"), btn = $("button[type=submit]", f);
+    msg.classList.remove("bad");
+    if (!EMAIL_RE.test(v)) { msg.classList.add("bad"); msg.textContent = "That email doesn't look right."; return f.elements.email.focus(); }
+    btn.disabled = true; msg.textContent = "Sending…";
+    let res; try { res = await sendSignInLink(v); } catch (err) { res = { ok: false, msg: "You seem to be offline. Try again when you're connected." }; }
+    btn.disabled = false;
+    if (!res.ok) { msg.classList.add("bad"); msg.textContent = res.msg; return; }
+    msg.textContent = "Link sent to " + v + ". Open it on this device to finish signing in. Check spam if it's not there in a minute.";
+  };
+}
+
 /* ---------- helpers ---------- */
 const todayKey = (d = new Date()) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 const monthKey = () => todayKey().slice(0, 7);
@@ -521,6 +766,84 @@ function emergencyLeft() {
   return EMERGENCY_LIMIT - S.emergency.used;
 }
 function blockedApps() { return (S.modes[S.activeMode] || MODES.study).apps; }
+
+/* ---------- insights maths ----------
+   "Time won back" is an estimate, and the app says so: while you're locked,
+   the apps you'd normally spend (baseline hours / 16 waking hours) of your time
+   on can't open. 4 h/day baseline -> a quarter of locked time comes back. */
+const WAKING_HOURS = 16;
+const baselineShare = () => Math.min(1, Math.max(0, (S.profile && S.profile.hours) || 4) / WAKING_HOURS);
+const wonBack = ms => ms * baselineShare();
+const lockedDays = (from, to) => { let t = 0; for (let o = from; o <= to; o++) t += lockedMs(o); return t; };
+const thisWeekMs = () => lockedDays(0, 6), lastWeekMs = () => lockedDays(7, 13);
+function pctChange(now, before) {
+  if (!before) return now ? "new" : null;
+  return Math.round(((now - before) / before) * 100);
+}
+// Minutes locked per clock hour over the last 30 days, grouped into four parts of the day.
+const DAYPARTS = [["Morning", 5, 12], ["Afternoon", 12, 17], ["Evening", 17, 22], ["Night", 22, 29]];
+function lockedByDaypart() {
+  const since = Date.now() - 30 * DAY, perHour = new Array(24).fill(0);
+  const spans = S.sessions.filter(s => s.end > since).map(s => [Math.max(s.start, since), s.end]);
+  if (S.lock) spans.push([Math.max(S.lock.start, since), Date.now()]);
+  spans.forEach(([a, b]) => {
+    let t = a;
+    while (t < b) {
+      const d = new Date(t), next = new Date(d); next.setMinutes(60, 0, 0);
+      const end = Math.min(b, next.getTime());
+      perHour[d.getHours()] += end - t; t = end;
+    }
+  });
+  return DAYPARTS.map(([name, from, to]) => {
+    let ms = 0; for (let h = from; h < to; h++) ms += perHour[h % 24];
+    return { name: name, ms: ms };
+  });
+}
+function urgesSince(ms) { return (S.urges || []).filter(u => u.at > Date.now() - ms); }
+function logUrge() {
+  S.urges = S.urges || [];
+  S.urges.push({ at: Date.now(), mode: S.lock ? S.lock.mode : S.activeMode });
+  if (S.urges.length > 2000) S.urges = S.urges.slice(-2000);
+  addXP(5); save();
+  const today = (S.urges || []).filter(u => todayKey(new Date(u.at)) === todayKey()).length;
+  toast(today === 1 ? "Logged. First urge resisted today." : "Logged. " + today + " urges resisted today.");
+  buzz(20);
+}
+/* Share card: a 1080x1350 image of your streak, shared through the phone's
+   share sheet where supported, downloaded as a PNG everywhere else. */
+async function shareStreak() {
+  const days = streakDays(), won = wonBack(thisWeekMs());
+  const c = document.createElement("canvas"); c.width = 1080; c.height = 1350;
+  const g = c.getContext("2d");
+  try { await document.fonts.ready; } catch (e) {}
+  const disp = '"Bricolage Grotesque", "Arial Narrow", sans-serif', body = '"Instrument Sans", system-ui, sans-serif';
+  g.fillStyle = "#121311"; g.fillRect(0, 0, 1080, 1350);
+  const glow = g.createRadialGradient(540, 560, 40, 540, 560, 520);
+  glow.addColorStop(0, "rgba(198,255,61,.28)"); glow.addColorStop(1, "rgba(198,255,61,0)");
+  g.fillStyle = glow; g.fillRect(0, 0, 1080, 1350);
+  const rr = (x, y, w, h, r) => { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); };
+  g.fillStyle = "#c6ff3d"; rr(290, 300, 500, 500, 150); g.fill();
+  g.fillStyle = "#10140a"; g.textAlign = "center"; g.textBaseline = "middle";
+  g.font = "800 " + (days > 99 ? 210 : 260) + "px " + disp; g.fillText(String(days), 540, 535);
+  g.font = "600 44px " + body; g.fillText(days === 1 ? "day" : "days", 540, 690);
+  g.fillStyle = "#f2f0e8"; g.font = "700 64px " + disp;
+  g.fillText(days === 1 ? "First day of BLOCK." : days + "-day BLOCK streak.", 540, 930);
+  g.fillStyle = "#a3a699"; g.font = "500 40px " + body;
+  g.fillText(won > 60000 ? "~" + hhmm(won) + " won back this week" : "Phone down. Life up.", 540, 1010);
+  g.fillStyle = "#c6ff3d"; g.font = "700 40px " + disp; g.fillText("B L O C K", 540, 1190);
+  g.fillStyle = "#6f7466"; g.font = "500 30px " + body; g.fillText("Tap to stop.", 540, 1245);
+  const blob = await new Promise(res => c.toBlob(res, "image/png"));
+  if (!blob) return toast("Couldn't make the image on this device.");
+  const file = new File([blob], "block-streak.png", { type: "image/png" });
+  const text = days + (days === 1 ? " day" : " days") + " of keeping my phone down with BLOCK.";
+  try {
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: "My BLOCK streak", text: text }); return; }
+  } catch (e) { if (e && e.name === "AbortError") return; }
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "block-streak.png";
+  document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  toast("Saved your streak card as an image.");
+}
+function buzz(ms) { try { if (navigator.vibrate && navigator.userActivation && navigator.userActivation.hasBeenActive) navigator.vibrate(ms); } catch (e) {} }
 function checkBadges() {
   const d = streakDays();
   MILESTONES.forEach(([n, label]) => {
@@ -636,7 +959,7 @@ function puckFound(id, method) {
   if (!o.pairing && S.puck && S.puck.id && puckMethod(S.puck) !== "demo" && id !== S.puck.id)
     return puckStatus("That's a different puck. Use the one you paired, or pair this one in Profile.", true);
   stopPuck();
-  if (navigator.vibrate) navigator.vibrate(40);
+  buzz(40);
   o.onPuck(id, method);
 }
 function demoTap() {
@@ -741,13 +1064,27 @@ function teardownLanding() {
   clearInterval(LANDING.promoTimer); LANDING.promoTimer = null;
 }
 
+// The landing page is always the dark brand page; app screens follow the
+// Appearance setting (Dark / Light / Match my phone).
+const lightQuery = window.matchMedia ? matchMedia("(prefers-color-scheme: light)") : null;
+function applyTheme(r) {
+  const pick = S.theme === "system" ? (lightQuery && lightQuery.matches ? "light" : "dark") : (S.theme || "dark");
+  const t = r === "landing" ? "dark" : pick;
+  document.documentElement.dataset.theme = t;
+  const m = $('meta[name="theme-color"]'); if (m) m.content = t === "light" ? "#f4f3ee" : "#121311";
+  const cs = $('meta[name="color-scheme"]'); if (cs) cs.content = t;
+}
+if (lightQuery && lightQuery.addEventListener) lightQuery.addEventListener("change", () => { if (S.theme === "system" && !$("#ov")) render(); });
+
 function render() {
   disposeViewers();
   teardownLanding();
   stopPuck();
   const r = route();
+  applyTheme(r);
   const root = $("#root");
   if (r === "landing") { root.innerHTML = landing(); bindLanding(); }
+  else if (r === "auth" && S.user && S.profile) return go("app/home");
   else if (r === "auth") { root.innerHTML = authView(); bindAuth(); }
   else if (r === "onboarding") { renderOB(); }
   else if (r.startsWith("app/")) {
@@ -1142,10 +1479,18 @@ function authView() {
     <p class="err" id="a-err" role="alert"></p>
     <div class="ob-nav"><button class="btn btn-ghost" id="a-back">Back</button><button class="btn btn-lime" id="a-go">Continue</button></div>
     <p class="note">BLOCK never reads what you do inside an app. It only checks which app is on screen.</p>
+    <p class="muted" style="font-size:14px;margin-top:18px;text-align:center">Already use BLOCK on another device? <button class="linkbtn" id="a-signin">Sign in to bring your data</button></p>
   </div></div>`;
 }
 function bindAuth() {
   $("#a-back").onclick = () => go("landing");
+  $("#a-signin").onclick = () => {
+    overlay(`<h2 id="ov-title">Sign in</h2>
+      <p class="muted">We'll email you a link. Open it on this device and your sessions, streaks and settings come across.</p>
+      ${signInFormHTML()}`);
+    bindSignInForm();
+    setTimeout(() => { const i = $("#acct-mail"); if (i) i.focus(); }, 50);
+  };
   $("#a-go").onclick = () => {
     const n = $("#a-name").value.trim();
     if (!n) return ($("#a-err").textContent = "Enter a name so the app knows what to call you.");
@@ -1293,8 +1638,8 @@ function tabBtn(k, label, cur) {
 }
 function ringSVG(pct) {
   const r = 84, c = 2 * Math.PI * r;
-  return `<svg width="188" height="188" viewBox="0 0 188 188"><circle cx="94" cy="94" r="${r}" stroke="#242721" stroke-width="13" fill="none"/>
-  <circle cx="94" cy="94" r="${r}" stroke="#c6ff3d" stroke-width="13" fill="none" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - Math.min(1, pct))}"/></svg>`;
+  return `<svg width="188" height="188" viewBox="0 0 188 188" aria-hidden="true"><circle cx="94" cy="94" r="${r}" style="stroke:var(--surface2)" stroke-width="13" fill="none"/>
+  <circle cx="94" cy="94" r="${r}" style="stroke:var(--ring)" stroke-width="13" fill="none" stroke-linecap="round" stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - Math.min(1, pct))}"/></svg>`;
 }
 
 /* ---------- home ---------- */
@@ -1311,6 +1656,7 @@ function homeView() {
       <p class="timer" id="elapsed">${hhmm(Date.now() - S.lock.start)}</p>
       <p class="muted" style="text-align:center;font-size:14px">${S.profile.goal ? esc(S.profile.goal) : "Locked since " + new Date(S.lock.start).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</p>
       <div class="row" style="margin-top:18px"><button class="btn btn-lime" style="flex:1" id="h-tap">Tap the puck to unlock</button></div>
+      <button class="btn btn-ghost btn-sm" style="width:100%;margin-top:10px" id="h-urge">Feeling the pull? Log it and stay locked</button>
       <button class="btn btn-ghost btn-sm" style="width:100%;margin-top:10px" id="h-emg">Emergency unlock (${emergencyLeft()} left this month)</button>
     </section>`
     : `<section style="padding:4px 0 10px">${puckBlock(false, "Tap to shut " + nApps(mode.apps.length) + " in " + mode.name + " mode")}</section>`}
@@ -1322,9 +1668,13 @@ function homeView() {
     <div class="stats">
       <div><b>${streakDays()}</b><span>Day streak</span></div>
       <div><b>${S.sessions.filter(s => s.start > Date.now() - 7 * DAY).length}</b><span>Sessions this week</span></div>
-      <div><b>${hhmm(lockedMs(0) + lockedMs(1) + lockedMs(2))}</b><span>Last 3 days</span></div>
+      <div><b>~${hhmm(wonBack(thisWeekMs()))}</b><span>Won back this week</span></div>
     </div>
   </section>
+  ${!S.sessions.length && !on ? `<section class="card" style="margin-top:12px">
+    <b>Start with one short session</b>
+    <p class="muted" style="font-size:14px;margin-top:6px">Tap the puck above, put it in another room, and come back in 25 minutes. Your insights fill in from there.</p>
+  </section>` : ""}
 
   <section class="card" style="margin-top:12px">
     <div class="row between" style="margin-bottom:12px"><b>Mode</b><a class="muted" style="font-size:13px" href="#app/modes">Edit lists</a></div>
@@ -1400,14 +1750,51 @@ function insightsView() {
   const top = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
   const byMode = {};
   S.sessions.forEach(s => byMode[s.mode] = (byMode[s.mode] || 0) + (s.end - s.start));
-  return `<div class="topbar"><h1>Insights</h1><span class="pill">${S.sessions.length} sessions</span></div>
+  const last = lastWeekMs(), change = pctChange(week, last);
+  const won = wonBack(week), wonLast = wonBack(last);
+  const parts = lockedByDaypart(), partMax = Math.max(1, ...parts.map(p => p.ms)), partTotal = parts.reduce((a, p) => a + p.ms, 0);
+  const best = partTotal ? parts.reduce((a, p) => (p.ms > a.ms ? p : a)) : null;
+  const urgesWeek = urgesSince(7 * DAY), urgesAll = S.urges || [];
+  const urgeHours = new Array(24).fill(0); urgesAll.forEach(u => urgeHours[new Date(u.at).getHours()]++);
+  const peakHour = urgesAll.length ? urgeHours.indexOf(Math.max(...urgeHours)) : -1;
+  const hourLabel = h => new Date(2000, 0, 1, h).toLocaleTimeString("en-IN", { hour: "numeric" });
+  const changeText = change === null ? "" : change === "new" ? "Your first week with locks" : (change >= 0 ? "↑ " + change + "% more locked time than last week" : "↓ " + Math.abs(change) + "% less locked time than last week");
+  return `<div class="topbar"><h1>Insights</h1><span class="pill">${S.sessions.length} session${S.sessions.length === 1 ? "" : "s"}</span></div>
 
-  <section class="card">
+  <section class="card wonback" aria-labelledby="wb-h">
+    <p class="eyebrow" id="wb-h" style="margin-bottom:6px">Time won back this week</p>
+    <p class="bignow">~${hhmm(won)}</p>
+    <p class="muted" style="font-size:14px">${week ? `From ${hhmm(week)} locked, at your ${(S.profile.hours || 4)} h/day baseline.` : "Lock a session and this starts counting."}
+      ${last ? ` Last week: ~${hhmm(wonLast)}.` : ""}</p>
+    ${changeText ? `<p class="delta ${change !== "new" && change < 0 ? "down" : ""}">${changeText}</p>` : ""}
+    <details class="how"><summary>How is this worked out?</summary><p>While you're locked, the apps that usually take ${(S.profile.hours || 4)} of your ${WAKING_HOURS} waking hours can't open. So about ${Math.round(baselineShare() * 100)}% of locked time is time those apps would have had. It's an estimate. Change your baseline in Profile.</p></details>
+  </section>
+
+  <section class="card" style="margin-top:12px">
     <div class="row between"><b>Last seven days</b><span class="muted" style="font-size:13px">${hhmm(week)} locked</span></div>
-    <div class="bars">${days.map(d => {
+    <div class="bars" role="img" aria-label="Locked time per day: ${days.map(d => (d.o === 0 ? "today" : DAYS[(new Date(Date.now() - d.o * DAY).getDay() + 6) % 7]) + " " + hhmm(d.ms)).join(", ")}">${days.map(d => {
       const label = d.o === 0 ? "Today" : DAYS[(new Date(Date.now() - d.o * DAY).getDay() + 6) % 7];
       return `<div><i style="height:${Math.max(3, (d.ms / max) * 100)}%" title="${hhmm(d.ms)}"></i><em>${label.slice(0, 3)}</em></div>`;
     }).join("")}</div>
+    <div class="stats" style="margin-top:14px">
+      <div><b>${hhmm(week)}</b><span>This week</span></div>
+      <div><b>${hhmm(last)}</b><span>Last week</span></div>
+      <div><b>${hhmm(week / 7)}</b><span>Daily average</span></div>
+    </div>
+  </section>
+
+  <section class="card" style="margin-top:12px">
+    <div class="row between"><b>When you lock</b><span class="muted" style="font-size:13px">Last 30 days</span></div>
+    ${partTotal ? `<div class="hbars">${parts.map(p => `<div class="hbar"><span>${p.name}</span><i><b style="width:${Math.max(2, (p.ms / partMax) * 100)}%"></b></i><em>${hhmm(p.ms)}</em></div>`).join("")}</div>
+      <p class="muted" style="font-size:13px;margin-top:10px">${best.name} is when you lock most. ${best.name === "Night" || best.name === "Evening" ? "A Sleep schedule would make that automatic." : "Try a schedule to make it automatic."}</p>`
+      : `<p class="muted" style="font-size:14px;margin-top:8px">Your first few sessions show which part of the day you protect most.</p>`}
+  </section>
+
+  <section class="card" style="margin-top:12px">
+    <div class="row between"><b>Urges resisted</b><span class="tag ${urgesWeek.length ? "on" : ""}">${urgesWeek.length} this week</span></div>
+    ${urgesAll.length ? `<p class="muted" style="font-size:14px;margin-top:8px">${urgesAll.length} in total. They peak around <b class="lime">${hourLabel(peakHour)}</b>, so that's a good time to already be locked.</p>
+      <ul class="urgelist">${urgesAll.slice(-5).reverse().map(u => `<li><span>${new Date(u.at).toLocaleString("en-IN", { weekday: "short", hour: "numeric", minute: "2-digit" })}</span><span class="muted">${esc((MODES[u.mode] || MODES.study).name)}</span></li>`).join("")}</ul>`
+      : `<p class="muted" style="font-size:14px;margin-top:8px">While you're locked and feel the pull to unlock, press “Feeling the pull?” on Home. Each one you sit out is logged here.</p>`}
   </section>
 
   <section class="card" style="margin-top:12px"><div class="stats" style="margin-top:0">
@@ -1431,9 +1818,9 @@ function insightsView() {
   </section>
 
   <section class="card" style="margin-top:12px">
-    <b>Badges</b>
+    <div class="row between"><b>Badges</b>${streakDays() ? `<button class="btn btn-ghost btn-sm" id="share-streak">Share my streak</button>` : ""}</div>
     <div class="chips" style="margin-top:12px">${MILESTONES.map(([n, l]) =>
-      `<span class="chip" aria-pressed="${S.claimed.includes("m" + n)}" style="cursor:default">${l}</span>`).join("")}</div>
+      `<span class="chip${S.claimed.includes("m" + n) ? " earned" : ""}" style="cursor:default">${S.claimed.includes("m" + n) ? "✓ " : ""}${l}<span class="sr-only">${S.claimed.includes("m" + n) ? " (earned)" : " (not yet)"}</span></span>`).join("")}</div>
   </section>
 
   <div class="row" style="margin-top:18px"><button class="btn btn-ghost btn-sm" id="demo">${S.demo ? "Remove sample data" : "Load sample data"}</button></div>`;
@@ -1469,12 +1856,23 @@ function profileView() {
   </section>
 
   <section class="card" style="margin-top:12px">
-    <b>Your goal</b>
+    <label for="p-goal"><b>Your goal</b></label>
     <div class="row" style="margin-top:12px"><input type="text" id="p-goal" value="${esc(S.profile.goal)}" placeholder="What the time is for"><button class="btn btn-ghost btn-sm" id="p-goal-save">Save</button></div>
+    <div class="q" style="margin-top:18px"><label for="p-hours">Hours a day you used to spend on these apps: <b class="lime" id="p-hours-v">${S.profile.hours || 4}</b></label>
+      <p class="why">Insights use this to estimate the time you win back.</p>
+      <input id="p-hours" type="range" min="0.5" max="12" step="0.5" value="${S.profile.hours || 4}"></div>
+  </section>
+
+  ${accountCardHTML()}
+
+  <section class="card" style="margin-top:12px">
+    <b id="theme-h">Appearance</b>
+    <div class="chips" role="radiogroup" aria-labelledby="theme-h" style="margin-top:12px">${[["dark", "Dark"], ["light", "Light"], ["system", "Match my phone"]].map(([k, l]) =>
+      `<button class="chip" role="radio" data-theme-set="${k}" aria-checked="${(S.theme || "dark") === k}" aria-pressed="${(S.theme || "dark") === k}">${l}</button>`).join("")}</div>
   </section>
 
   <section class="card stack" style="margin-top:12px">
-    <p class="muted" style="font-size:14px"><span id="sync">${syncLabel()}</span>. Your sessions are yours. Export them or wipe them whenever you like.</p>
+    <p class="muted" style="font-size:14px"><span id="sync">${ACCOUNT.session ? "Synced to " + esc(ACCOUNT.email || "your account") : syncLabel()}</span>. Your sessions are yours. Export them or wipe them whenever you like.</p>
     <div class="row" style="flex-wrap:wrap"><button class="btn btn-ghost btn-sm" id="p-export">Export my data</button><button class="btn btn-ghost btn-sm" id="p-erase">Erase everything</button></div>
   </section>
 
@@ -1519,7 +1917,9 @@ function tapOverlay() {
     <p class="muted">${on ? "Walk to wherever you left the puck and tap your phone on it." : "Shuts " + nApps(blockedApps().length) + " in " + S.modes[S.activeMode].name + " mode. Then leave the puck in another room."}</p>
     <div style="margin:18px 0 6px">${puckBlock(on, demo ? "Demo puck · tap it on screen" : (S.puck ? esc(S.puck.name) : "Your puck"))}</div>
     ${readerPanel()}
-    ${on ? `<button class="btn btn-ghost btn-sm" style="width:100%;margin-top:12px" id="ov-emg">Emergency unlock instead (${emergencyLeft()} left)</button>` : ""}`);
+    ${on ? `<button class="btn btn-lime btn-sm" style="width:100%;margin-top:12px" id="ov-stay">Actually, I'll stay locked</button>
+      <button class="btn btn-ghost btn-sm" style="width:100%;margin-top:10px" id="ov-emg">Emergency unlock instead (${emergencyLeft()} left)</button>` : ""}`);
+  const stay = $("#ov-stay"); if (stay) stay.onclick = () => { closeOverlay(); logUrge(); render(); };
   mountPuck(".ovbg #puck", { onTap: demoTap });
   listenForPuck({ pairing: false, onPuck: () => {
     ripple();
@@ -1583,21 +1983,44 @@ function checkSchedule() {
 }
 
 /* ---------- overlay ---------- */
+// Dialogs: labelled by their heading, focus moves in and is kept inside
+// (Tab wraps), Escape closes, and focus returns to whatever opened it.
+let ovReturnFocus = null;
+const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]):not(.hp),select,textarea,[tabindex]:not([tabindex="-1"])';
 function overlay(html) {
-  closeOverlay();
+  const opener = document.activeElement;
+  closeOverlay(true);
+  ovReturnFocus = opener;
   const d = document.createElement("div");
   d.className = "ovbg"; d.id = "ov";
-  d.innerHTML = `<div class="ov" role="dialog" aria-modal="true" style="position:relative"><button class="ovx" id="ov-x" aria-label="Close">&times;</button>${html}</div>`;
+  d.innerHTML = `<div class="ov" role="dialog" aria-modal="true" style="position:relative" tabindex="-1"><button class="ovx" id="ov-x" aria-label="Close">&times;</button>${html}</div>`;
   document.body.append(d); document.body.style.overflow = "hidden";
-  $("#ov-x").onclick = closeOverlay;
+  const box = $(".ov", d), h = $("h2", box);
+  if (h) { h.id = h.id || "ov-title"; box.setAttribute("aria-labelledby", h.id); }
+  $("#root").setAttribute("aria-hidden", "true");
+  $("#ov-x").onclick = () => closeOverlay();
   d.onclick = e => { if (e.target === d) closeOverlay(); };
+  d.addEventListener("keydown", e => {
+    if (e.key !== "Tab") return;
+    const f = $$(FOCUSABLE, box).filter(x => x.offsetParent !== null);
+    if (!f.length) return;
+    const first = f[0], last = f[f.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
+  setTimeout(() => { if (box.contains(document.activeElement)) return; const f = $$(FOCUSABLE, box).filter(x => x.id !== "ov-x" && x.offsetParent !== null); (f[0] || box).focus({ preventScroll: true }); }, 30);
 }
-function closeOverlay() {
+function closeOverlay(keepFocusTarget) {
   disposeViewers();
   stopPuck();
   if (aiAbort) { try { aiAbort.abort(); } catch (e) {} aiAbort = null; }
   const o = $("#ov"); if (o) o.remove();
   document.body.style.overflow = "";
+  const root = $("#root"); if (root) root.removeAttribute("aria-hidden");
+  // (handlers pass an Event here, so only a literal `true` means "keep")
+  const keep = keepFocusTarget === true;
+  if (!keep && ovReturnFocus && document.contains(ovReturnFocus)) { try { ovReturnFocus.focus({ preventScroll: true }); } catch (e) {} }
+  if (!keep) ovReturnFocus = null;
 }
 
 /* ---------- coach ---------- */
@@ -1674,16 +2097,31 @@ function coachOpen(first) {
 
 /* ---------- sample data ---------- */
 function toggleDemo() {
-  if (S.demo) { S.sessions = S.sessions.filter(s => !s.demo); S.demo = false; S.streakStart = S.streakStart || 0; }
-  else {
-    const pat = [95, 140, 0, 180, 120, 60, 155];
-    pat.forEach((mins, i) => {
-      if (!mins) return;
-      const d = new Date(); d.setHours(19, 0, 0, 0); d.setTime(d.getTime() - (6 - i) * DAY);
-      const mode = MKEYS[i % 4];
-      S.sessions.push({ start: d.getTime(), end: d.getTime() + mins * 60000, mode, apps: S.modes[mode].apps.slice(), demo: true });
+  if (S.demo) {
+    S.sessions = S.sessions.filter(s => !s.demo);
+    S.urges = (S.urges || []).filter(u => !u.demo);
+    S.demo = false; S.streakStart = S.streakStart || 0;
+  } else {
+    // two weeks of sessions (last week lighter than this one) plus some logged urges
+    const plan = [ // [days ago, start hour, minutes, mode]
+      [13, 19, 50, "study"], [12, 22, 90, "sleep"], [10, 14, 45, "work"], [9, 20, 60, "family"], [8, 22, 120, "sleep"],
+      [6, 9, 95, "study"], [5, 14, 140, "work"], [4, 22, 180, "sleep"], [3, 19, 120, "study"], [2, 20, 60, "family"],
+      [1, 22, 155, "sleep"], [1, 10, 80, "study"], [0, 9, 70, "study"],
+    ];
+    const now = Date.now();
+    plan.forEach(([ago, hour, mins, mode]) => {
+      const d = new Date(now - ago * DAY); d.setHours(hour, 0, 0, 0);
+      let start = d.getTime(), end = start + mins * 60000;
+      if (end > now) { end = now - 60000; start = end - mins * 60000; }   // today's session can't be in the future
+      S.sessions.push({ start: start, end: end, mode: mode, apps: S.modes[mode].apps.slice(), demo: true });
     });
-    S.demo = true; S.streakStart = S.streakStart || Date.now() - 6 * DAY; S.xp += 60;
+    [[6, 10.2], [5, 15.1], [4, 23.3], [3, 20.4], [1, 23.1], [1, 10.6], [0, 9.5]].forEach(([ago, h]) => {
+      const d = new Date(now - ago * DAY); d.setHours(Math.floor(h), Math.round((h % 1) * 60), 0, 0);
+      if (d.getTime() < now) S.urges.push({ at: d.getTime(), mode: "study", demo: true });
+    });
+    S.sessions.sort((a, b) => a.start - b.start);
+    S.urges.sort((a, b) => a.at - b.at);
+    S.demo = true; S.streakStart = S.streakStart || now - 6 * DAY; S.lastDay = S.lastDay || todayKey(); S.xp += 60;
   }
   save(); render();
 }
@@ -1698,6 +2136,16 @@ function bindApp(tab) {
     unlockNow(true); render(); toast("Emergency unlock used. " + emergencyLeft() + " left.");
   };
   const hc = $("#h-coach"); if (hc) hc.onclick = () => coachOpen();
+  const hu = $("#h-urge"); if (hu) hu.onclick = () => { logUrge(); render(); };
+  bindSignInForm();
+  const as = $("#acct-sync"); if (as) as.onclick = async () => { as.disabled = true; const ch = await pullAccount(true); as.disabled = false; if (ch) render(); else toast(ACCOUNT.status === "synced" ? "Everything's up to date." : accountStatusText()); };
+  const ao = $("#acct-out"); if (ao) ao.onclick = signOut;
+  $$("[data-theme-set]").forEach(b => b.onclick = () => { S.theme = b.dataset.themeSet; save(); render(); });
+  const ss = $("#share-streak"); if (ss) ss.onclick = shareStreak;
+  const bl = $("#p-hours"); if (bl) {
+    bl.oninput = () => { $("#p-hours-v").textContent = bl.value; };
+    bl.onchange = () => { S.profile.hours = +bl.value; save(); toast("Baseline set to " + bl.value + " h a day."); };
+  }
   if (S.lock) startTick(); else clearInterval(tickId);
 
   $$("[data-setmode]").forEach(b => b.onclick = () => {
@@ -1764,11 +2212,14 @@ function bindApp(tab) {
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   };
   const er = $("#p-erase"); if (er) er.onclick = () => {
-    overlay(`<h2>Erase everything?</h2><p class="muted">Every session, schedule and badge goes. This can't be undone.</p>
+    overlay(`<h2 id="ov-title">Erase everything?</h2><p class="muted">Every session, schedule and badge goes${ACCOUNT.session ? ", on this device and in your synced account" : ""}. This can't be undone.</p>
       <div class="row" style="margin-top:22px"><button class="btn btn-ghost" style="flex:1" id="e-no">Keep it</button><button class="btn btn-lime" style="flex:1" id="e-yes">Erase</button></div>`);
     $("#e-no").onclick = closeOverlay;
     $("#e-yes").onclick = async () => {
-      S = blank(); try { localStorage.removeItem(KEY); } catch (e) {}
+      const keepTheme = S.theme;
+      clearTimeout(ACCOUNT.pushTimer);
+      S = blank(); S.theme = keepTheme; try { localStorage.removeItem(KEY); } catch (e) {}
+      await deleteAccountData();
       if (CLOUD.db && CLOUD.uid) { try { await CLOUD.db.doc("data/users/" + CLOUD.uid + "/state").delete(); } catch (e) {} }
       closeOverlay(); go("landing"); render();
     };
@@ -1997,6 +2448,12 @@ function mountPuck(sel, opts) {
   const el = renderer.domElement;
   el.style.touchAction = "none";
   const pointers = new Map();
+  // keyboard and screen-reader access: the puck is a button
+  if (opts.onTap) {
+    el.tabIndex = 0; el.setAttribute("role", "button");
+    el.setAttribute("aria-label", opts.label || "The BLOCK puck. Press to tap it.");
+    el.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); opts.onTap(); } });
+  } else el.setAttribute("aria-hidden", "true");
 
   el.addEventListener("pointerdown", e => {
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -2109,9 +2566,24 @@ function mountPuck(sel, opts) {
 function disposeViewers() { VIEWERS.slice().forEach(v => v.dispose()); }
 
 /* ---------- go ---------- */
+const cameFromLink = takeAuthFromUrl();
 render();
 initCloud();
 if (S.lock) startTick();
+if (ACCOUNT.session) pullAccount(true).then(changed => {
+  if (cameFromLink) toast(ACCOUNT.email ? "Signed in as " + ACCOUNT.email + ". Sync is on." : "Signed in. Sync is on.");
+  // a restored account skips the welcome and setup screens
+  if (S.user && S.profile && /^(auth|onboarding)$/.test(route())) { closeOverlay(); return go("app/home"); }
+  if ((changed || cameFromLink) && !$("#ov")) render();
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden || !ACCOUNT.session) return;
+  pullAccount().then(changed => {
+    const typing = document.activeElement && /INPUT|TEXTAREA/.test(document.activeElement.tagName);
+    if (changed && !$("#ov") && !typing && route() !== "onboarding") render();
+  });
+});
+addEventListener("online", () => { if (ACCOUNT.session) queueAccountPush(); });
 checkSchedule();
 setInterval(checkSchedule, 20000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) checkSchedule(); });
