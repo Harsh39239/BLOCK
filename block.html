@@ -415,6 +415,26 @@ details.how p{font-size:13px;margin-top:8px}
 .urgelist li{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-top:1px solid var(--line);font-size:14px}
 .chip.earned{background:var(--lime);color:var(--lime-ink);border-color:var(--lime);font-weight:600}
 
+/* ---------- modes, lock sheet, presets ---------- */
+.modepick{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 6px;margin:0 -2px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.modepick::-webkit-scrollbar{display:none}
+.modepick .chip{flex:none;display:inline-flex;align-items:center}
+.modepick .chip-add{color:var(--muted);border-style:dashed}
+.medit{border-top:1px solid var(--line);margin-top:16px;padding-top:4px}
+.kinds{display:grid;gap:8px}
+.kinds .opt{margin-top:0;padding:14px 16px}
+.kinds .opt b{font-size:16px}
+.presets{display:grid;gap:8px;margin-top:12px}
+.presets .opt{margin-top:0}
+.chip.site{display:inline-flex;align-items:center;gap:6px;padding:6px 6px 6px 14px;cursor:default}
+.chip.site .x{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-size:18px;line-height:1;color:var(--muted)}
+.chip.site .x:hover{background:var(--surface2);color:var(--text)}
+.holdbtn{position:relative;overflow:hidden;isolation:isolate}
+.holdbtn::before{content:"";position:absolute;inset:0;width:var(--p,0%);background:var(--lime);z-index:-1;transition:width .06s linear}
+.holdbtn span{position:relative;transition:color .2s}
+.holdbtn[style*="--p"] span{color:var(--text)}
+.mode.open{border-color:var(--line)}
+
 /* ---------- accessibility + motion ---------- */
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .linkbtn{color:var(--lime-soft);text-decoration:underline;text-underline-offset:3px;font-weight:600;padding:4px 2px;font-size:inherit}
@@ -469,15 +489,52 @@ const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
 
 /* ---------- catalogue ---------- */
-const APPS = ["Instagram", "YouTube", "Reddit", "X", "Snapchat", "TikTok", "Facebook", "LinkedIn", "Netflix", "Hotstar", "Chess", "Swiggy", "Zomato", "Amazon", "News", "Games"];
+const APPS = ["Instagram", "YouTube", "Reddit", "X", "Snapchat", "TikTok", "Facebook", "LinkedIn", "Netflix", "Hotstar", "Chess", "Swiggy", "Zomato", "Amazon", "News", "Games",
+  "Chrome", "Firefox", "Samsung Internet", "Opera", "Brave"];
+const BROWSERS = ["Chrome", "Firefox", "Samsung Internet", "Opera", "Brave"];
 const ESSENTIAL = ["Phone", "Messages", "WhatsApp", "Maps", "UPI"];
+const DEFAULT_PICKS = ["Instagram", "YouTube", "Reddit", "X", "Snapchat"];
+/* A mode is a named list plus how to use it:
+     kind "block": shut the apps in the list
+     kind "allow": shut everything EXCEPT the apps in the list (and the essentials)
+     kind "all":   shut every app except the essentials
+   plus websites to block in browsers, and whether to silence blocked apps' notifications. */
 const MODES = {
-  study: { name: "Study", note: "Exams, assignments, deep reading", apps: ["Instagram", "YouTube", "Reddit", "X", "Snapchat", "TikTok", "Games", "Chess"] },
-  work: { name: "Work", note: "Meetings, writing, focused blocks", apps: ["Instagram", "Reddit", "X", "Netflix", "Hotstar", "Games"] },
-  sleep: { name: "Sleep", note: "Wind down and stay off the phone", apps: ["Instagram", "YouTube", "Reddit", "X", "Netflix", "Hotstar", "News", "Games"] },
-  family: { name: "Family", note: "Dinner, evenings, time with people", apps: ["Instagram", "YouTube", "X", "LinkedIn", "News", "Games"] },
+  study: { name: "Study", note: "Exams, assignments, deep reading", kind: "block", apps: ["Instagram", "YouTube", "Reddit", "X", "Snapchat", "TikTok", "Games", "Chess"], sites: [], silence: true },
+  work: { name: "Work", note: "Meetings, writing, focused blocks", kind: "block", apps: ["Instagram", "Reddit", "X", "Netflix", "Hotstar", "Games"], sites: [], silence: true },
+  sleep: { name: "Sleep", note: "Wind down and stay off the phone", kind: "all", apps: [], sites: [], silence: true },
+  family: { name: "Family", note: "Dinner, evenings, time with people", kind: "block", apps: ["Instagram", "YouTube", "X", "LinkedIn", "News", "Games"], sites: [], silence: true },
 };
-const MKEYS = ["study", "work", "sleep", "family"];
+const MAX_MODES = 10;
+const modeKeys = () => Object.keys(S.modes);
+const modeOf = k => S.modes[k] || S.modes[modeKeys()[0]];
+const modeName = k => (S.modes[k] ? S.modes[k].name : "Removed mode");
+function shutApps(m) {
+  if (!m) return [];
+  if (m.kind === "all") return APPS.slice();
+  if (m.kind === "allow") return APPS.filter(a => !m.apps.includes(a));
+  return m.apps.slice();
+}
+function modeSummary(m) {
+  if (!m) return "";
+  const sites = m.sites && m.sites.length ? " · " + m.sites.length + " site" + (m.sites.length === 1 ? "" : "s") : "";
+  if (m.kind === "all") return "Shuts everything except the essentials" + sites;
+  if (m.kind === "allow") return "Only " + nApps(m.apps.length) + " + essentials stay open" + sites;
+  return "Shuts " + nApps(m.apps.length) + sites;
+}
+// Bring older saved data (and synced copies) up to the current shape.
+function normalizeState(st) {
+  Object.keys(st.modes || {}).forEach(k => {
+    const m = st.modes[k];
+    m.kind = m.kind || "block"; m.apps = m.apps || []; m.sites = m.sites || [];
+    if (m.silence === undefined) m.silence = true;
+    if (m.note === undefined) m.note = "";
+  });
+  if (!st.modes || !Object.keys(st.modes).length) st.modes = JSON.parse(JSON.stringify(MODES));
+  if (!st.modes[st.activeMode]) st.activeMode = Object.keys(st.modes)[0];
+  st.morePucks = st.morePucks || [];
+  return st;
+}
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const MILESTONES = [[1, "First lock"], [3, "Three days"], [7, "One week"], [14, "Two weeks"], [30, "One month"], [60, "Two months"], [100, "Hundred days"]];
 const EMERGENCY_LIMIT = 5;
@@ -493,10 +550,12 @@ function blank() {
     urges: [],            // { at, mode } each time you felt the pull and stayed locked
     theme: "dark",        // app screens: "dark" | "light" | "system" (the landing page stays dark)
     updatedAt: 0,         // last local change, used to merge with the synced copy
+    morePucks: [],        // extra pucks (bedroom, office...); any paired puck unlocks
+    hideTimer: false,     // hide the running session clock (some people find it stressful)
   };
 }
 let S = load();
-function load() { try { return Object.assign(blank(), JSON.parse(localStorage.getItem(KEY) || "{}")); } catch (e) { return blank(); } }
+function load() { try { return normalizeState(Object.assign(blank(), JSON.parse(localStorage.getItem(KEY) || "{}"))); } catch (e) { return blank(); } }
 function save(localOnly) {
   if (!localOnly) S.updatedAt = Date.now();
   try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {}
@@ -645,6 +704,8 @@ function mergeStates(local, remote) {
   const le = local.emergency || {}, re = remote.emergency || {};
   if (le.month && le.month === re.month) out.emergency = { month: le.month, used: Math.max(le.used || 0, re.used || 0) };
   out.demo = !!(local.demo || remote.demo);
+  const pk = new Map(); [...(local.morePucks || []), ...(remote.morePucks || [])].forEach(p => p && pk.set(p.id || p.paired, p));
+  out.morePucks = [...pk.values()];
   out.updatedAt = Math.max(local.updatedAt || 0, remote.updatedAt || 0);
   return out;
 }
@@ -684,7 +745,7 @@ async function pullAccount(force) {
     const rows = await r.json();
     const remote = rows[0] && rows[0].state;
     const before = JSON.stringify(S);
-    S = mergeStates(S, remote);
+    S = normalizeState(mergeStates(S, remote));
     changed = JSON.stringify(S) !== before;
     if (changed) save(true);
     ACCOUNT.busy = false;
@@ -765,7 +826,7 @@ function emergencyLeft() {
   if (S.emergency.month !== monthKey()) S.emergency = { month: monthKey(), used: 0 };
   return EMERGENCY_LIMIT - S.emergency.used;
 }
-function blockedApps() { return (S.modes[S.activeMode] || MODES.study).apps; }
+function blockedApps(k) { return shutApps(modeOf(k || S.activeMode)); }
 
 /* ---------- insights maths ----------
    "Time won back" is an estimate, and the app says so: while you're locked,
@@ -842,6 +903,23 @@ async function shareStreak() {
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "block-streak.png";
   document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
   toast("Saved your streak card as an image.");
+}
+// Press-and-hold button: fills over `ms`, fires once, cancels if released early.
+// Works with mouse, touch and keyboard (hold Enter or Space).
+function bindHold(btn, ms, onDone) {
+  // A timer decides when the hold is complete; animation frames only paint the fill.
+  let t0 = 0, raf = 0, timer = 0, done = false;
+  const set = p => btn.style.setProperty("--p", (p * 100).toFixed(1) + "%");
+  const paint = () => { set(Math.min(1, (performance.now() - t0) / ms)); if (t0 && !done) raf = requestAnimationFrame(paint); };
+  const finish = () => { done = true; cancelAnimationFrame(raf); set(1); buzz(30); onDone(); };
+  const start = e => { if (done || t0) return; if (e.type === "keydown" && e.repeat) return; t0 = performance.now(); raf = requestAnimationFrame(paint); timer = setTimeout(finish, ms); };
+  const stop = () => { if (done) return; clearTimeout(timer); cancelAnimationFrame(raf); t0 = 0; set(0); };
+  btn.addEventListener("pointerdown", e => { e.preventDefault(); start(e); });
+  ["pointerup", "pointerleave", "pointercancel"].forEach(ev => btn.addEventListener(ev, stop));
+  btn.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); start(e); } });
+  btn.addEventListener("keyup", e => { if (e.key === "Enter" || e.key === " ") stop(); });
+  btn.addEventListener("click", e => e.preventDefault());
+  btn.addEventListener("contextmenu", e => e.preventDefault());
 }
 function buzz(ms) { try { if (navigator.vibrate && navigator.userActivation && navigator.userActivation.hasBeenActive) navigator.vibrate(ms); } catch (e) {} }
 function checkBadges() {
@@ -953,11 +1031,17 @@ function readerPanel() {
 const PUCK = { opts: null };
 function stopPuck() { NFC.stop(); QR.stop(); PUCK.opts = null; }
 function puckStatus(msg, bad) { const el = $("#rstat"); if (el) { el.textContent = msg; el.classList.toggle("bad", !!bad); } }
-function demoAllowed() { return PUCK.opts && (PUCK.opts.pairing ? !NFC.supported : puckMethod(S.puck) === "demo"); }
+// Every real (non-demo) puck paired on this phone; any of them unlocks it.
+const allPucks = () => [S.puck, ...(S.morePucks || [])].filter(Boolean);
+const pairedIds = () => allPucks().filter(p => p.id && puckMethod(p) !== "demo").map(p => p.id);
+const hasRealPuck = () => pairedIds().length > 0;
+function demoAllowed() { return PUCK.opts && !PUCK.opts.adding && (PUCK.opts.pairing ? !NFC.supported : !hasRealPuck()); }
 function puckFound(id, method) {
   const o = PUCK.opts; if (!o) return;
-  if (!o.pairing && S.puck && S.puck.id && puckMethod(S.puck) !== "demo" && id !== S.puck.id)
-    return puckStatus("That's a different puck. Use the one you paired, or pair this one in Profile.", true);
+  if (!o.pairing && method !== "demo" && hasRealPuck() && !pairedIds().includes(id))
+    return puckStatus("That's not one of your pucks. Use one you paired, or add this one in Profile.", true);
+  if (o.pairing && id && pairedIds().includes(id) && o.adding)
+    return puckStatus("That puck is already paired. Tap a different one.", true);
   stopPuck();
   buzz(40);
   o.onPuck(id, method);
@@ -965,7 +1049,7 @@ function puckFound(id, method) {
 function demoTap() {
   if (!PUCK.opts) return;
   if (demoAllowed()) return puckFound(null, "demo");
-  puckStatus("This puck is real, so the one on screen won't work. Tap your phone on the actual puck.", true);
+  puckStatus(PUCK.opts.adding ? "Add a real puck here. The one on screen is only for trying BLOCK." : "This puck is real, so the one on screen won't work. Tap your phone on the actual puck.", true);
 }
 function listenForPuck(opts) {
   stopPuck();
@@ -986,7 +1070,7 @@ function listenForPuck(opts) {
   };
   if (NFC.supported) btns.push(`<button class="btn btn-ghost btn-sm hide" id="r-nfc" type="button">Start NFC</button>`);
   if (QR.supported) btns.push(`<button class="btn btn-ghost btn-sm" id="r-qr" type="button">Scan the QR code instead</button>`);
-  if (opts.pairing && NFC.supported) btns.push(`<button class="btn btn-ghost btn-sm" id="r-demo" type="button">No puck yet? Use a demo puck</button>`);
+  if (opts.pairing && !opts.adding && NFC.supported) btns.push(`<button class="btn btn-ghost btn-sm" id="r-demo" type="button">No puck yet? Use a demo puck</button>`);
   acts.innerHTML = btns.join("");
   const nb = $("#r-nfc"); if (nb) nb.onclick = startNfc;
   const db = $("#r-demo"); if (db) db.onclick = () => puckFound(null, "demo");
@@ -1000,8 +1084,9 @@ function listenForPuck(opts) {
     });
   };
   if (NFC.supported) startNfc();
+  else if (opts.adding) puckStatus(QR.supported ? "Scan the QR code on the new puck." : "Adding a puck needs a phone that can read NFC or scan QR codes, like Chrome on Android.", !QR.supported);
   else if (opts.pairing) puckStatus(QR.supported ? "Scan the QR code, or tap the puck on screen for a demo." : "Tap the puck on screen to pair a demo puck.");
-  else if (puckMethod(S.puck) === "demo") puckStatus("Demo puck: tap it on screen.");
+  else if (!hasRealPuck()) puckStatus("Demo puck: tap it on screen.");
   else puckStatus("This device can't read NFC." + (QR.supported ? " Scan the QR code on the puck instead." : " Open BLOCK on the phone you paired."), !QR.supported);
 }
 
@@ -1084,17 +1169,21 @@ function render() {
   applyTheme(r);
   const root = $("#root");
   if (r === "landing") { root.innerHTML = landing(); bindLanding(); }
-  else if (r === "auth" && S.user && S.profile) return go("app/home");
-  else if (r === "auth") { root.innerHTML = authView(); bindAuth(); }
-  else if (r === "onboarding") { renderOB(); }
+  else if (r === "auth") return go(S.profile ? "app/home" : "onboarding");   // old links
+  else if (r === "onboarding") { if (S.user && S.profile) return go("app/home"); renderOB(); }
   else if (r.startsWith("app/")) {
-    if (!S.user) return go("auth");
-    if (!S.profile) return go("onboarding");
+    if (!S.user || !S.profile) return go("onboarding");
     root.innerHTML = appView(r.slice(4));
     bindApp(r.slice(4));
   } else go("landing");
-  window.scrollTo(0, 0);
+  // Re-drawing the same screen (toggling a chip, saving a setting) keeps your
+  // place; moving to a different screen starts at the top.
+  const y = r === lastRendered ? keepY : 0;
+  window.scrollTo({ top: y, left: 0, behavior: "instant" });
+  keepY = y; lastRendered = r;
 }
+let lastRendered = "", keepY = 0;
+addEventListener("scroll", () => { keepY = scrollY; }, { passive: true });
 
 /* ---------- landing ---------- */
 const PROMOS = [
@@ -1109,7 +1198,7 @@ const TIERS = [
   ["Three pucks", 3, "For the family or a study group", 0.15],
 ];
 const FEATURES = [
-  ["Modes", "Study, Work and Sleep each keep their own list of apps."],
+  ["Modes", "Up to ten. Block a list, allow only a few apps, or shut everything but the essentials, websites included."],
   ["Schedules", "Set study hours or a bedtime once and the lock arrives on its own."],
   ["Calls still work", "Phone, messages and maps stay open. This blocks the time sinks, not your life."],
 ];
@@ -1312,7 +1401,7 @@ function landing() {
   </div></div>`;
 }
 function bindLanding() {
-  const start = () => go(S.user ? (S.profile ? "app/home" : "onboarding") : "auth");
+  const start = () => go(S.user && S.profile ? "app/home" : "onboarding");
   ["#l-start", "#l-try", "#f-app"].forEach(id => { const el = $(id); if (el) el.onclick = e => { e.preventDefault(); start(); }; });
   // "Pre-order" buttons in the hero and sticky bar take you to the price card;
   // the price card's own button opens the reservation form.
@@ -1468,67 +1557,22 @@ function bindLanding() {
   }
 }
 
-/* ---------- auth ---------- */
-function authView() {
-  return `<div class="screen"><div class="ob">
-    <p class="logo" style="font-size:18px">BLOCK</p>
-    <h2 style="margin-top:28px">Let's set you up.</h2>
-    <p class="muted">Nothing here leaves your device unless you're signed in to Claude, in which case it syncs to your account only.</p>
-    <div class="q"><label for="a-name">What should the app call you?</label><input id="a-name" type="text" autocomplete="nickname" placeholder="First name or a nickname"></div>
-    <div class="q"><label class="row" style="font-weight:400;align-items:flex-start"><input id="a-ok" type="checkbox" style="margin-top:4px"> <span>I understand BLOCK needs permission to see which app is open, so it can close the ones I chose.</span></label></div>
-    <p class="err" id="a-err" role="alert"></p>
-    <div class="ob-nav"><button class="btn btn-ghost" id="a-back">Back</button><button class="btn btn-lime" id="a-go">Continue</button></div>
-    <p class="note">BLOCK never reads what you do inside an app. It only checks which app is on screen.</p>
-    <p class="muted" style="font-size:14px;margin-top:18px;text-align:center">Already use BLOCK on another device? <button class="linkbtn" id="a-signin">Sign in to bring your data</button></p>
-  </div></div>`;
-}
-function bindAuth() {
-  $("#a-back").onclick = () => go("landing");
-  $("#a-signin").onclick = () => {
-    overlay(`<h2 id="ov-title">Sign in</h2>
-      <p class="muted">We'll email you a link. Open it on this device and your sessions, streaks and settings come across.</p>
-      ${signInFormHTML()}`);
-    bindSignInForm();
-    setTimeout(() => { const i = $("#acct-mail"); if (i) i.focus(); }, 50);
-  };
-  $("#a-go").onclick = () => {
-    const n = $("#a-name").value.trim();
-    if (!n) return ($("#a-err").textContent = "Enter a name so the app knows what to call you.");
-    if (!$("#a-ok").checked) return ($("#a-err").textContent = "Tick the box to continue — the app can't block anything without that permission.");
-    S.user = { name: n, since: Date.now() }; save(); go("onboarding");
-  };
-}
-
 /* ---------- onboarding ---------- */
-const OB = { step: 0, d: { apps: [], hours: 4, goal: "", mode: "study", puckName: "Desk puck" } };
+// Two steps: pick apps (popular ones pre-picked), then pair. Everything else
+// (hours baseline, goal, modes, schedules) has sensible defaults and lives in
+// Profile / Modes for later.
+const OB = { step: 0, d: { apps: DEFAULT_PICKS.slice(), name: "", hours: 4, goal: "", mode: "study", puckName: "Desk puck" } };
 function obSteps() {
   const d = OB.d;
   return [
     {
       title: "What eats your day?",
-      why: "These become the list BLOCK shuts. You can change it any time.",
-      html: `<div class="chips" id="ob-apps">${APPS.map(a => `<button class="chip" data-app="${a}" aria-pressed="${d.apps.includes(a)}">${a}</button>`).join("")}</div>
-      <p class="note">${ESSENTIAL.join(", ")} stay open whatever you pick.</p>`,
+      why: "The usual suspects are already picked. Tap to add or remove.",
+      html: `<div class="chips" id="ob-apps">${APPS.filter(a => !BROWSERS.includes(a)).map(a => `<button class="chip" data-app="${a}" aria-pressed="${d.apps.includes(a)}">${a}</button>`).join("")}</div>
+      <p class="note">${ESSENTIAL.join(", ")} always stay open. You can add browsers, websites and more modes later.</p>
+      <div class="q"><label for="ob-name">What should BLOCK call you? <span class="muted" style="font-weight:400">(optional)</span></label><input id="ob-name" type="text" autocomplete="nickname" value="${esc(d.name)}" placeholder="First name or a nickname"></div>
+      <p class="muted" style="font-size:14px;margin-top:18px">Already use BLOCK on another device? <button class="linkbtn" id="ob-signin" type="button">Sign in to bring your data</button></p>`,
       ok: () => OB.d.apps.length > 0, err: "Pick at least one app.",
-    },
-    {
-      title: "How long are you on them?",
-      why: "A rough number is fine. It's the line your first week gets measured against.",
-      html: `<div class="q"><label for="hrs">Hours a day, roughly: <b class="lime" id="hrs-v">${d.hours}</b></label><input id="hrs" type="range" min="0.5" max="12" step="0.5" value="${d.hours}"></div>`,
-      ok: () => true,
-    },
-    {
-      title: "What do you want the time for?",
-      why: "This sits on your home screen while a session runs.",
-      html: `<div class="q"><label for="goal">In your own words</label><input id="goal" type="text" value="${esc(d.goal)}" placeholder="Two hours of study a day"></div>
-      <div class="chips" style="margin-top:12px" id="ob-goals">${["Study", "Sleep earlier", "Finish a project", "Be present at home"].map(g => `<button class="chip" data-goal="${g}">${g}</button>`).join("")}</div>`,
-      ok: () => true,
-    },
-    {
-      title: "Which mode do you start in?",
-      why: "Each mode keeps its own list. Study starts with what you just picked.",
-      html: MKEYS.map(k => `<button class="opt" data-mode="${k}" aria-pressed="${d.mode === k}"><b>${MODES[k].name}</b><span>${MODES[k].note}</span></button>`).join(""),
-      ok: () => true,
     },
     {
       title: "Pair your puck.",
@@ -1537,8 +1581,7 @@ function obSteps() {
         : "NFC tapping works in Chrome on Android. Here you can try BLOCK with a demo puck.",
       html: `${puckBlock(!!d.paired, d.paired ? "Paired ✓" : (NFC.supported ? "Waiting for your puck…" : "Demo puck"))}
       ${readerPanel()}
-      <div class="q"><label for="pname">Name this puck</label><input id="pname" type="text" value="${esc(d.puckName)}" placeholder="Desk puck"></div>
-      <p class="note">Each puck has its own ID. The app only accepts the one you pair, so a friend's puck won't unlock your phone.</p>`,
+      <p class="note">Each puck has its own ID, so a friend's puck won't unlock your phone. One puck can be paired on everyone's phone at home. On Android, BLOCK will also ask to see which app is open; it never reads what you do inside apps.</p>`,
       ok: () => !!OB.d.paired, err: "Pair a puck first, or pick the demo puck.",
       final: true,
     },
@@ -1546,11 +1589,9 @@ function obSteps() {
 }
 function planHTML() {
   const d = OB.d;
-  return `<div class="card" style="margin-top:22px">
-    <h3 style="font-size:19px">Your starting setup</h3>
-    <div class="list-item"><b>${MODES[d.mode].name} mode</b><p class="muted" style="font-size:14px">${nApps(d.apps.length)} will shut</p></div>
-    <div class="list-item"><b>${d.hours} hours a day</b><p class="muted" style="font-size:14px">The number we'll compare your first week against</p></div>
-    ${d.goal ? `<div class="list-item"><b>${esc(d.goal)}</b><p class="muted" style="font-size:14px">Shown while you're locked</p></div>` : ""}
+  return `<div class="card tight" style="margin-top:18px">
+    <b>You're starting in Study mode</b>
+    <p class="muted" style="font-size:14px;margin-top:4px">${nApps(d.apps.length)} will shut when you tap. Sleep mode shuts everything but the essentials. Change any of it later in Modes.</p>
   </div>`;
 }
 function renderOB() {
@@ -1575,11 +1616,7 @@ function bindOB(st) {
   });
   const hrs = $("#hrs");
   if (hrs) hrs.oninput = () => { OB.d.hours = +hrs.value; $("#hrs-v").textContent = hrs.value; };
-  $$("#ob-goals .chip").forEach(b => b.onclick = () => { $("#goal").value = b.dataset.goal; });
-  $$(".opt[data-mode]").forEach(b => b.onclick = () => {
-    OB.d.mode = b.dataset.mode;
-    $$(".opt[data-mode]").forEach(x => x.setAttribute("aria-pressed", x === b));
-  });
+  const si = $("#ob-signin"); if (si) si.onclick = openSignIn;
   if ($("#puck")) {
     mountPuck("#puck", { onTap: demoTap });
     if (!OB.d.paired) listenForPuck({ pairing: true, onPuck: (id, method) => {
@@ -1601,18 +1638,25 @@ function bindOB(st) {
   };
 }
 function readOB() {
-  const g = $("#goal"); if (g) OB.d.goal = g.value.trim();
-  const pn = $("#pname"); if (pn) OB.d.puckName = pn.value.trim() || "Desk puck";
-  const h = $("#hrs"); if (h) OB.d.hours = +h.value;
+  const n = $("#ob-name"); if (n) OB.d.name = n.value.trim().slice(0, 40);
 }
 function finishOB() {
   const d = OB.d;
+  S.user = S.user || { name: d.name, since: Date.now() };
+  if (d.name) S.user.name = d.name;
   S.profile = { apps: d.apps, hours: d.hours, goal: d.goal };
   S.activeMode = d.mode;
+  S.modes[d.mode].kind = "block";
   S.modes[d.mode].apps = d.apps.slice();
   const p = d.paired || { id: null, method: "demo" };
   S.puck = { id: p.id, method: p.method, name: d.puckName, paired: Date.now() };
-  addXP(40); save(); go("app/home");
+  addXP(40); save(); OB.step = 0; go("app/home");
+}
+function openSignIn() {
+  overlay(`<h2 id="ov-title">Sign in</h2>
+    <p class="muted">We'll email you a link. Open it on this device and your sessions, streaks and settings come across.</p>
+    ${signInFormHTML()}`);
+  bindSignInForm();
 }
 
 /* ---------- app shell ---------- */
@@ -1647,19 +1691,31 @@ function homeView() {
   const on = !!S.lock;
   const today = lockedMs(0);
   const target = (S.profile.hours || 4) * 0.5 * 3600000;
-  const mode = S.modes[on ? S.lock.mode : S.activeMode] || S.modes[S.activeMode];
-  return `<div class="topbar"><h1>${on ? "Locked" : "Hello, " + esc(S.user.name)}</h1>
+  const mk = on ? S.lock.mode : S.activeMode, mode = modeOf(mk);
+  const timeOf = ts => new Date(ts).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" });
+  const hello = S.user.name ? "Hello, " + esc(S.user.name) : "Hello";
+  return `<div class="topbar"><h1>${on ? "Locked" : hello}</h1>
     <span class="pill">Lv <b>${level()}</b> · ${S.xp} XP</span></div>
 
-  ${on ? `<section class="card" style="border-color:var(--lime)">
-      <div class="row between"><b>${esc(mode.name)} session</b><span class="tag on">${nApps(mode.apps.length)} shut</span></div>
-      <p class="timer" id="elapsed">${hhmm(Date.now() - S.lock.start)}</p>
-      <p class="muted" style="text-align:center;font-size:14px">${S.profile.goal ? esc(S.profile.goal) : "Locked since " + new Date(S.lock.start).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</p>
+  ${on ? `<section class="card" style="border-color:var(--lime)" aria-label="Current session">
+      <div class="row between"><b>${esc(modeName(mk))} session</b><span class="tag on">${mode.kind === "all" ? "All apps shut" : mode.kind === "allow" ? "Allow-only" : nApps(mode.apps.length) + " shut"}</span></div>
+      ${S.hideTimer
+        ? `<p class="timer" style="font-size:40px">Locked</p>`
+        : `<p class="timer" id="elapsed" aria-live="off">${S.lock.until ? hhmm(S.lock.until - Date.now()) : hhmm(Date.now() - S.lock.start)}</p>`}
+      <p class="muted" style="text-align:center;font-size:14px">${S.lock.until ? "Unlocks on its own at " + timeOf(S.lock.until) + (S.hideTimer ? "" : " · time left") : (S.profile.goal ? esc(S.profile.goal) : "Locked since " + timeOf(S.lock.start))}</p>
       <div class="row" style="margin-top:18px"><button class="btn btn-lime" style="flex:1" id="h-tap">Tap the puck to unlock</button></div>
       <button class="btn btn-ghost btn-sm" style="width:100%;margin-top:10px" id="h-urge">Feeling the pull? Log it and stay locked</button>
-      <button class="btn btn-ghost btn-sm" style="width:100%;margin-top:10px" id="h-emg">Emergency unlock (${emergencyLeft()} left this month)</button>
+      <div class="row between" style="margin-top:12px;flex-wrap:wrap;gap:6px">
+        <button class="linkbtn" id="h-timer">${S.hideTimer ? "Show the clock" : "Hide the clock"}</button>
+        <button class="linkbtn" id="h-emg" style="color:var(--muted)">Emergency unlock (${emergencyLeft()} left)</button>
+      </div>
     </section>`
-    : `<section style="padding:4px 0 10px">${puckBlock(false, "Tap to shut " + nApps(mode.apps.length) + " in " + mode.name + " mode")}</section>`}
+    : `<section aria-label="Lock">
+      <div class="modepick" role="radiogroup" aria-label="Mode">${modeKeys().map(k => `<button class="chip" role="radio" aria-checked="${S.activeMode === k}" data-setmode="${k}" aria-pressed="${S.activeMode === k}">${esc(S.modes[k].name)}</button>`).join("")}<a class="chip chip-add" href="#app/modes" aria-label="Edit modes">Edit</a></div>
+      <p class="muted" style="font-size:13px;margin-top:8px">${esc(modeSummary(mode))}</p>
+      ${puckBlock(false, "Tap the puck to lock")}
+      <button class="btn btn-lime" style="width:100%;margin-top:6px" id="h-lock">Lock ${esc(modeName(mk))}</button>
+    </section>`}
 
   <section class="card" style="margin-top:12px" aria-label="Today">
     <div class="row between"><b>Today</b><span class="muted" style="font-size:13px">${hhmm(target)} is your half-day target</span></div>
@@ -1677,11 +1733,6 @@ function homeView() {
   </section>` : ""}
 
   <section class="card" style="margin-top:12px">
-    <div class="row between" style="margin-bottom:12px"><b>Mode</b><a class="muted" style="font-size:13px" href="#app/modes">Edit lists</a></div>
-    <div class="chips">${MKEYS.map(k => `<button class="chip" data-setmode="${k}" aria-pressed="${S.activeMode === k}">${MODES[k].name}</button>`).join("")}</div>
-  </section>
-
-  <section class="card" style="margin-top:12px">
     <div class="row between"><div><b>Schedule</b>
       <p class="muted" style="font-size:13px;margin-top:4px">${S.schedule.length ? S.schedule.length + " rule" + (S.schedule.length === 1 ? "" : "s") + " · next lock starts on its own" : "Set study hours or a bedtime once"}</p></div>
       <a class="btn btn-ghost btn-sm" href="#app/schedule">${S.schedule.length ? "Edit" : "Set up"}</a></div>
@@ -1695,40 +1746,87 @@ function homeView() {
 }
 
 /* ---------- modes ---------- */
+// Which mode's editor is open (one at a time keeps the screen short).
+let editingMode = null;
+const KINDS = [["block", "Block these apps", "Shut only what you pick"], ["allow", "Allow only these", "Shut everything else"], ["all", "Block everything", "Only the essentials stay open"]];
 function modesView() {
-  return `<div class="topbar"><h1>Modes</h1><span class="pill">${MKEYS.length} lists</span></div>
-  <p class="muted" style="margin-bottom:16px">Each mode keeps its own list of apps to shut. ${ESSENTIAL.join(", ")} always stay open.</p>
-  ${MKEYS.map(k => {
-    const m = S.modes[k], on = S.activeMode === k;
-    return `<section class="card" style="margin-bottom:12px${on ? ";border-color:var(--lime)" : ""}">
-      <div class="row between"><div><b style="font-family:var(--display);font-size:18px">${MODES[k].name}</b>
-      <p class="muted" style="font-size:13px">${MODES[k].note}</p></div>
-      <button class="btn ${on ? "btn-lime" : "btn-ghost"} btn-sm" data-setmode="${k}">${on ? "Active" : "Use"}</button></div>
-      <div class="chips" style="margin-top:14px">${APPS.map(a =>
-        `<button class="chip" data-mode="${k}" data-app="${a}" aria-pressed="${m.apps.includes(a)}">${a}</button>`).join("")}</div>
-      <p class="muted" style="font-size:13px;margin-top:12px">${nApps(m.apps.length)} shut in this mode</p>
+  const frozen = S.lock && S.strict;
+  const keys = modeKeys();
+  return `<div class="topbar"><h1>Modes</h1><span class="pill">${keys.length} of ${MAX_MODES}</span></div>
+  <p class="muted" style="margin-bottom:16px">A mode is what gets shut when you tap. ${ESSENTIAL.join(", ")} always stay open.</p>
+  ${frozen ? `<div class="note" style="margin:0 0 14px">Strict mode is on, so modes are frozen until you unlock.</div>` : ""}
+  ${keys.map(k => {
+    const m = S.modes[k], on = S.activeMode === k, open = editingMode === k && !frozen;
+    return `<section class="card mode${open ? " open" : ""}" style="margin-bottom:12px${on ? ";border-color:var(--lime)" : ""}" aria-labelledby="mh-${k}">
+      <div class="row between" style="align-items:flex-start">
+        <div><b id="mh-${k}" style="font-family:var(--display);font-size:18px">${esc(m.name)}</b>
+          <p class="muted" style="font-size:13px;margin-top:2px">${esc(modeSummary(m))}</p></div>
+        <div class="row" style="gap:8px;flex:none">
+          <button class="btn btn-ghost btn-sm" data-editmode="${k}" aria-expanded="${open}"${frozen ? " disabled" : ""}>${open ? "Done" : "Edit"}</button>
+          <button class="btn ${on ? "btn-lime" : "btn-ghost"} btn-sm" data-setmode="${k}" aria-pressed="${on}">${on ? "Active" : "Use"}</button>
+        </div>
+      </div>
+      ${open ? modeEditorHTML(k, m) : ""}
     </section>`;
-  }).join("")}`;
+  }).join("")}
+  ${keys.length < MAX_MODES && !frozen ? `<button class="btn btn-ghost" style="width:100%" id="mode-new">+ New mode</button>` : ""}
+  <p class="why" style="margin-top:14px">Blocked websites and silenced notifications take effect in the BLOCK Android app.</p>`;
+}
+function modeEditorHTML(k, m) {
+  const pickable = APPS;
+  return `<div class="medit">
+    <div class="q"><label for="mn-${k}">Name</label><input id="mn-${k}" data-modename="${k}" type="text" maxlength="24" value="${esc(m.name)}"></div>
+    <div class="q"><span class="ql" id="mk-${k}">What it does</span>
+      <div class="kinds" role="radiogroup" aria-labelledby="mk-${k}">${KINDS.map(([v, l, d]) =>
+        `<button class="opt" role="radio" data-kind="${v}" data-mode="${k}" aria-checked="${m.kind === v}" aria-pressed="${m.kind === v}"><b>${l}</b><span>${d}</span></button>`).join("")}</div></div>
+    ${m.kind === "all" ? "" : `<div class="q"><span class="ql">${m.kind === "allow" ? "Apps that stay open" : "Apps to shut"}</span>
+      <div class="chips">${pickable.map(a => `<button class="chip" data-mode="${k}" data-app="${a}" aria-pressed="${m.apps.includes(a)}">${a}</button>`).join("")}</div></div>`}
+    <div class="q"><label for="ms-${k}">Websites to block</label>
+      <p class="why">Blocked in every browser while this mode is on. For example youtube.com</p>
+      <form class="row" data-siteform="${k}" novalidate><input id="ms-${k}" type="text" inputmode="url" autocapitalize="off" spellcheck="false" placeholder="instagram.com"><button class="btn btn-ghost btn-sm" type="submit">Add</button></form>
+      <p class="err" id="mse-${k}" role="alert"></p>
+      ${m.sites.length ? `<div class="chips" style="margin-top:8px">${m.sites.map(s => `<span class="chip site">${esc(s)}<button class="x" data-delsite="${esc(s)}" data-mode="${k}" aria-label="Remove ${esc(s)}">×</button></span>`).join("")}</div>` : ""}</div>
+    <div class="row between" style="margin-top:18px"><div><b>Silence their notifications</b><p class="muted" style="font-size:13px;margin-top:2px">No pings from blocked apps while you're locked.</p></div>
+      <button class="sw" data-silence="${k}" aria-pressed="${!!m.silence}" aria-label="Silence notifications from blocked apps"></button></div>
+    ${modeKeys().length > 1 ? `<button class="linkbtn" style="color:var(--warn);margin-top:16px" data-delmode="${k}">Delete this mode</button>` : ""}
+  </div>`;
+}
+// "https://www.YouTube.com/watch?v=1" -> "youtube.com"
+function cleanSite(v) {
+  let s = String(v || "").trim().toLowerCase().replace(/^[a-z]+:\/\//, "").replace(/^www\./, "").split(/[\/?#\s]/)[0];
+  return /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(s) && s.length <= 80 ? s : "";
 }
 
 /* ---------- schedule ---------- */
+const SCHEDULE_PRESETS = [
+  { label: "Bedtime", from: "22:30", to: "07:00", mode: "sleep", days: [0, 1, 2, 3, 4, 5, 6] },
+  { label: "Study evenings", from: "17:00", to: "20:00", mode: "study", days: [0, 1, 2, 3, 4] },
+  { label: "Work day", from: "09:30", to: "13:00", mode: "work", days: [0, 1, 2, 3, 4] },
+];
+const presetMode = p => (S.modes[p.mode] ? p.mode : modeKeys()[0]);
 function scheduleView() {
   return `<div class="topbar"><h1>Schedule</h1><span class="pill">${S.schedule.length} rule${S.schedule.length === 1 ? "" : "s"}</span></div>
   <p class="muted" style="margin-bottom:16px">A scheduled lock starts on its own and ends at the time you set. You still need the puck to end it early. In this web version, schedules run while BLOCK is open on this device; the Android app runs them in the background.</p>
   ${S.schedule.length ? S.schedule.map((r, i) => `<section class="card" style="margin-bottom:10px">
       <div class="row between"><div><b style="font-family:var(--display);font-size:17px">${r.from} – ${r.to}</b>
-      <p class="muted" style="font-size:13px">${MODES[r.mode].name} · ${r.days.map(d => DAYS[d]).join(", ")}</p></div>
+      <p class="muted" style="font-size:13px">${esc(modeName(r.mode))} · ${r.days.length === 7 ? "Every day" : r.days.length === 5 && r.days.every(d => d < 5) ? "Weekdays" : r.days.map(d => DAYS[d]).join(", ")}</p></div>
       <button class="btn btn-ghost btn-sm" data-delrule="${i}">Remove</button></div></section>`).join("")
     : `<div class="card empty"><b>No schedules yet</b><p>Add study hours or a bedtime and the lock will arrive without you deciding again.</p></div>`}
 
   <section class="card" style="margin-top:14px">
-    <b style="font-family:var(--display);font-size:17px">New rule</b>
+    <b style="font-family:var(--display);font-size:17px">Quick add</b>
+    <div class="presets">${SCHEDULE_PRESETS.filter(p => !S.schedule.some(r => r.from === p.from && r.to === p.to && r.mode === presetMode(p))).map((p, i) =>
+      `<button class="opt" data-preset="${SCHEDULE_PRESETS.indexOf(p)}"><b>${p.label}</b><span>${p.from}–${p.to} · ${p.days.length === 7 ? "every day" : "weekdays"} · ${esc(modeName(presetMode(p)))}</span></button>`).join("") || `<p class="muted" style="font-size:14px;margin-top:8px">All the quick rules are added.</p>`}</div>
+  </section>
+
+  <section class="card" style="margin-top:12px">
+    <b style="font-family:var(--display);font-size:17px">Custom rule</b>
     <div class="row" style="margin-top:14px;gap:10px">
       <div style="flex:1"><label class="muted" style="font-size:13px" for="s-from">From</label><input id="s-from" type="time" value="22:00"></div>
       <div style="flex:1"><label class="muted" style="font-size:13px" for="s-to">To</label><input id="s-to" type="time" value="07:00"></div>
     </div>
     <div class="q" style="margin-top:16px"><span class="ql">Mode</span>
-      <div class="chips" id="s-mode">${MKEYS.map((k, i) => `<button class="chip" data-m="${k}" aria-pressed="${i === 2}">${MODES[k].name}</button>`).join("")}</div></div>
+      <div class="chips" id="s-mode">${modeKeys().map(k => `<button class="chip" data-m="${k}" aria-pressed="${k === (S.modes.sleep ? "sleep" : modeKeys()[0])}">${esc(S.modes[k].name)}</button>`).join("")}</div></div>
     <div class="q"><span class="ql">Days</span>
       <div class="weekgrid" id="s-days">${DAYS.map((d, i) => `<button data-d="${i}" aria-pressed="true">${d}</button>`).join("")}</div></div>
     <button class="btn btn-lime" style="width:100%;margin-top:18px" id="s-add">Add this rule</button>
@@ -1793,7 +1891,7 @@ function insightsView() {
   <section class="card" style="margin-top:12px">
     <div class="row between"><b>Urges resisted</b><span class="tag ${urgesWeek.length ? "on" : ""}">${urgesWeek.length} this week</span></div>
     ${urgesAll.length ? `<p class="muted" style="font-size:14px;margin-top:8px">${urgesAll.length} in total. They peak around <b class="lime">${hourLabel(peakHour)}</b>, so that's a good time to already be locked.</p>
-      <ul class="urgelist">${urgesAll.slice(-5).reverse().map(u => `<li><span>${new Date(u.at).toLocaleString("en-IN", { weekday: "short", hour: "numeric", minute: "2-digit" })}</span><span class="muted">${esc((MODES[u.mode] || MODES.study).name)}</span></li>`).join("")}</ul>`
+      <ul class="urgelist">${urgesAll.slice(-5).reverse().map(u => `<li><span>${new Date(u.at).toLocaleString("en-IN", { weekday: "short", hour: "numeric", minute: "2-digit" })}</span><span class="muted">${esc(modeName(u.mode))}</span></li>`).join("")}</ul>`
       : `<p class="muted" style="font-size:14px;margin-top:8px">While you're locked and feel the pull to unlock, press “Feeling the pull?” on Home. Each one you sit out is logged here.</p>`}
   </section>
 
@@ -1805,8 +1903,8 @@ function insightsView() {
 
   <section class="card" style="margin-top:12px">
     <b>Where the time went</b>
-    ${Object.keys(byMode).length ? `<div style="margin-top:12px">${MKEYS.filter(k => byMode[k]).map(k =>
-      `<div class="row between" style="margin-bottom:9px"><span>${MODES[k].name}</span><span class="lime">${hhmm(byMode[k])}</span></div>`).join("")}</div>`
+    ${Object.keys(byMode).length ? `<div style="margin-top:12px">${Object.keys(byMode).sort((a, b) => byMode[b] - byMode[a]).map(k =>
+      `<div class="row between" style="margin-bottom:9px"><span>${esc(modeName(k))}</span><span class="lime">${hhmm(byMode[k])}</span></div>`).join("")}</div>`
       : `<p class="muted" style="font-size:14px;margin-top:8px">Lock a session and the split by mode shows up here.</p>`}
   </section>
 
@@ -1828,12 +1926,18 @@ function insightsView() {
 
 /* ---------- profile ---------- */
 function profileView() {
-  return `<div class="topbar"><h1>${esc(S.user.name)}</h1><span class="pill">Lv <b>${level()}</b></span></div>
+  return `<div class="topbar"><h1>${S.user.name ? esc(S.user.name) : "Profile"}</h1><span class="pill">Lv <b>${level()}</b></span></div>
 
-  <section class="card">
-    <div class="row between"><div><b style="font-family:var(--display);font-size:18px">${S.puck ? esc(S.puck.name) : "No puck paired"}</b>
-    <p class="muted" style="font-size:13px;margin-top:3px">${S.puck ? esc(puckLabel(S.puck)) + " · paired " + fmtDate(S.puck.paired) : "Pair one to start locking"}</p></div>
-    <button class="btn btn-ghost btn-sm" id="p-repair">${S.puck ? (puckMethod(S.puck) === "demo" ? "Pair a real puck" : "Replace") : "Pair"}</button></div>
+  <section class="card" aria-labelledby="pk-h">
+    <div class="row between"><b id="pk-h">Your pucks</b><span class="muted" style="font-size:13px">Any of them unlocks this phone</span></div>
+    <div class="list-item row between" style="margin-top:6px"><div><b style="font-family:var(--display);font-size:17px">${S.puck ? esc(S.puck.name) : "No puck paired"}</b>
+      <p class="muted" style="font-size:13px;margin-top:3px">${S.puck ? esc(puckLabel(S.puck)) + " · paired " + fmtDate(S.puck.paired) : "Pair one to start locking"}</p></div>
+      <button class="btn btn-ghost btn-sm" id="p-repair">${S.puck ? (puckMethod(S.puck) === "demo" ? "Pair a real puck" : "Replace") : "Pair"}</button></div>
+    ${(S.morePucks || []).map((p, i) => `<div class="list-item row between"><div><b style="font-family:var(--display);font-size:17px">${esc(p.name)}</b>
+      <p class="muted" style="font-size:13px;margin-top:3px">${esc(puckLabel(p))} · paired ${fmtDate(p.paired)}</p></div>
+      <button class="btn btn-ghost btn-sm" data-delpuck="${i}" aria-label="Remove ${esc(p.name)}">Remove</button></div>`).join("")}
+    ${hasRealPuck() && (S.morePucks || []).length < 4 ? `<button class="btn btn-ghost btn-sm" id="p-addpuck" style="margin-top:12px">+ Add another puck</button>
+      <p class="why" style="margin-top:8px">Keep one on your desk and one by the bed. One puck can also be shared by everyone at home.</p>` : ""}
   </section>
 
   <section class="card" style="margin-top:12px">
@@ -1885,7 +1989,11 @@ function profileView() {
 let tickId = null;
 function startTick() {
   clearInterval(tickId);
-  tickId = setInterval(() => { const el = $("#elapsed"); if (el && S.lock) el.textContent = hhmm(Date.now() - S.lock.start); }, 1000);
+  tickId = setInterval(() => {
+    const el = $("#elapsed"); if (!el || !S.lock) return;
+    el.textContent = S.lock.until ? hhmm(Math.max(0, S.lock.until - Date.now())) : hhmm(Date.now() - S.lock.start);
+    if (S.lock.until && Date.now() >= S.lock.until) checkSchedule();   // timed session finished
+  }, 1000);
 }
 function lockNow(mode) {
   S.lock = { start: Date.now(), mode: mode || S.activeMode };
@@ -1904,7 +2012,7 @@ function lockNow(mode) {
 }
 function unlockNow(emergency) {
   if (!S.lock) return;
-  const s = { start: S.lock.start, end: Date.now(), mode: S.lock.mode, apps: S.modes[S.lock.mode].apps.slice(), emergency: !!emergency };
+  const s = { start: S.lock.start, end: Date.now(), mode: S.lock.mode, apps: shutApps(S.modes[S.lock.mode]), emergency: !!emergency };
   if (s.end - s.start > 30000) { S.sessions.push(s); addXP(Math.min(40, Math.round((s.end - s.start) / 600000) * 5)); }
   S.lock = null;
   if (emergency) { emergencyLeft(); S.emergency.used++; }
@@ -1912,21 +2020,39 @@ function unlockNow(emergency) {
 }
 function tapOverlay() {
   const on = !!S.lock;
-  const demo = puckMethod(S.puck) === "demo";
-  overlay(`<h2>${on ? "Tap to unlock" : "Tap to lock"}</h2>
-    <p class="muted">${on ? "Walk to wherever you left the puck and tap your phone on it." : "Shuts " + nApps(blockedApps().length) + " in " + S.modes[S.activeMode].name + " mode. Then leave the puck in another room."}</p>
-    <div style="margin:18px 0 6px">${puckBlock(on, demo ? "Demo puck · tap it on screen" : (S.puck ? esc(S.puck.name) : "Your puck"))}</div>
+  const demo = !hasRealPuck();
+  const durs = [[0, "Until I tap"], [25, "25 min"], [60, "1 hour"], [120, "2 hours"]];
+  const dur = S.lastDuration || 0;
+  overlay(`<h2>${on ? "Tap to unlock" : "Lock " + esc(modeName(S.activeMode))}</h2>
+    <p class="muted">${on ? "Walk to wherever you left the puck and tap your phone on it." : esc(modeSummary(modeOf(S.activeMode))) + ". Then leave the puck in another room."}</p>
+    ${on ? "" : `<div class="q" style="margin-top:16px"><span class="ql" id="dur-h">How long?</span>
+      <div class="chips" role="radiogroup" aria-labelledby="dur-h" id="durs">${durs.map(([m, l]) => `<button class="chip" role="radio" data-dur="${m}" aria-checked="${dur === m}" aria-pressed="${dur === m}">${l}</button>`).join("")}</div>
+      <p class="why" style="margin-top:8px" id="dur-note">${dur ? "Unlocks on its own when time's up, or earlier with your puck." : "Stays locked until you tap the puck again."}</p></div>`}
+    <div style="margin:12px 0 6px">${puckBlock(on, demo ? "Demo puck · tap it on screen" : (S.puck ? esc(S.puck.name) : "Your puck"))}</div>
     ${readerPanel()}
     ${on ? `<button class="btn btn-lime btn-sm" style="width:100%;margin-top:12px" id="ov-stay">Actually, I'll stay locked</button>
-      <button class="btn btn-ghost btn-sm" style="width:100%;margin-top:10px" id="ov-emg">Emergency unlock instead (${emergencyLeft()} left)</button>` : ""}`);
+      <button class="btn btn-ghost btn-sm" style="width:100%;margin-top:10px" id="ov-emg">Emergency unlock instead (${emergencyLeft()} left)</button>`
+      : `<button class="btn btn-ghost holdbtn" style="width:100%;margin-top:12px" id="ov-hold"><span>Puck not nearby? Hold to lock anyway</span></button>
+      <p class="why" style="margin-top:8px;text-align:center">Unlocking will still need your puck.</p>`}`);
   const stay = $("#ov-stay"); if (stay) stay.onclick = () => { closeOverlay(); logUrge(); render(); };
+  $$("#durs .chip").forEach(b => b.onclick = () => {
+    S.lastDuration = +b.dataset.dur; save(true);
+    $$("#durs .chip").forEach(x => { x.setAttribute("aria-pressed", x === b); x.setAttribute("aria-checked", x === b); });
+    $("#dur-note").textContent = S.lastDuration ? "Unlocks on its own when time's up, or earlier with your puck." : "Stays locked until you tap the puck again.";
+  });
+  const doLock = () => {
+    lockNow();
+    if (S.lastDuration) { S.lock.until = Date.now() + S.lastDuration * 60000; save(); }
+    toast(S.lock.until ? "Locked for " + hhmm(S.lastDuration * 60000) + ". Leave the puck somewhere else." : modeSummary(modeOf(S.activeMode)).replace(/^Shuts/, "Shut") + ". Leave the puck somewhere else.");
+    closeOverlay(); render(); startTick();
+  };
+  const hb = $("#ov-hold"); if (hb) bindHold(hb, 2000, () => { ripple(); setTimeout(doLock, 300); });
   mountPuck(".ovbg #puck", { onTap: demoTap });
   listenForPuck({ pairing: false, onPuck: () => {
     ripple();
     setTimeout(() => {
-      if (S.lock) { unlockNow(false); toast("Unlocked. " + hhmm(lockedMs(0)) + " locked today."); }
-      else { lockNow(); toast(nApps(blockedApps().length) + " shut. Leave the puck somewhere else."); }
-      closeOverlay(); render(); startTick();
+      if (S.lock) { unlockNow(false); toast("Unlocked. " + hhmm(lockedMs(0)) + " locked today."); closeOverlay(); render(); }
+      else doLock();
     }, 420);
   } });
   const e = $("#ov-emg");
@@ -1966,16 +2092,21 @@ function checkSchedule() {
   const now = Date.now();
   let changed = false;
   if (S.lock && S.lock.until && now >= S.lock.until) {
-    unlockNow(false); toast("Scheduled lock ended."); notify("Lock ended", "Your scheduled session is over. Apps are open again."); changed = true;
+    const wasScheduled = !!S.lock.scheduled;
+    unlockNow(false);
+    toast(wasScheduled ? "Scheduled lock ended." : "Session done. Apps are open again.");
+    notify(wasScheduled ? "Lock ended" : "Session done", wasScheduled ? "Your scheduled session is over. Apps are open again." : "Nice work. Your timed session is over and apps are open again.");
+    changed = true;
   }
   if (!S.lock) {
     const w = activeWindow(new Date(now));
     if (w && S.autoKey !== w.key) {
       S.autoKey = w.key;
-      lockNow(w.rule.mode);
-      S.lock.until = w.until; save();
-      toast("Scheduled " + MODES[w.rule.mode].name + " lock started.");
-      notify(MODES[w.rule.mode].name + " lock started", nApps(S.modes[w.rule.mode].apps.length) + " shut until " + w.rule.to + ". Tap your puck to end it early.");
+      const mk = S.modes[w.rule.mode] ? w.rule.mode : modeKeys()[0];   // the rule's mode may have been deleted
+      lockNow(mk);
+      S.lock.until = w.until; S.lock.scheduled = true; save();
+      toast("Scheduled " + modeName(mk) + " lock started.");
+      notify(modeName(mk) + " lock started", modeSummary(S.modes[mk]) + " until " + w.rule.to + ". Tap your puck to end it early.");
       changed = true;
     }
   }
@@ -2040,11 +2171,11 @@ function coachOffline(txt) {
 }
 function coachContext() {
   const p = [];
-  p.push("Name: " + S.user.name);
+  if (S.user.name) p.push("Name: " + S.user.name);
   p.push("Active mode: " + S.modes[S.activeMode].name + " (" + blockedApps().join(", ") + ")");
   p.push("Currently " + (S.lock ? "LOCKED for " + hhmm(Date.now() - S.lock.start) : "unlocked"));
   p.push("Locked today: " + hhmm(lockedMs(0)) + "; streak " + streakDays() + " days");
-  p.push("Schedules: " + (S.schedule.length ? S.schedule.map(r => r.from + "-" + r.to + " " + MODES[r.mode].name).join("; ") : "none"));
+  p.push("Schedules: " + (S.schedule.length ? S.schedule.map(r => r.from + "-" + r.to + " " + modeName(r.mode)).join("; ") : "none"));
   p.push("Strict mode: " + (S.strict ? "on" : "off"));
   if (S.profile.goal) p.push("Their goal: " + S.profile.goal);
   return p.join("\n");
@@ -2061,12 +2192,12 @@ function coachOpen(first) {
   const addRow = (mine, text) => {
     const r = document.createElement("div");
     r.className = "chatrow" + (mine ? " me" : "");
-    r.innerHTML = `<span class="av">${mine ? esc(S.user.name[0].toUpperCase()) : "B"}</span><div class="msg${mine ? " me" : ""}"></div>`;
+    r.innerHTML = `<span class="av">${mine ? esc((S.user.name || "You")[0].toUpperCase()) : "B"}</span><div class="msg${mine ? " me" : ""}"></div>`;
     r.lastChild.textContent = text;
     chat.append(r); r.scrollIntoView({ block: "end" });
     return r.lastChild;
   };
-  addRow(false, S.lock ? "You're " + hhmm(Date.now() - S.lock.start) + " into a " + S.modes[S.lock.mode].name + " session. What's up?" : "Hi " + S.user.name + ". What's on your mind?");
+  addRow(false, S.lock ? "You're " + hhmm(Date.now() - S.lock.start) + " into a " + modeName(S.lock.mode) + " session. What's up?" : "Hi" + (S.user.name ? " " + S.user.name : "") + ". What's on your mind?");
   let busy = false;
   const send = async v => {
     v = v.trim(); if (!v || busy) return;
@@ -2113,7 +2244,7 @@ function toggleDemo() {
       const d = new Date(now - ago * DAY); d.setHours(hour, 0, 0, 0);
       let start = d.getTime(), end = start + mins * 60000;
       if (end > now) { end = now - 60000; start = end - mins * 60000; }   // today's session can't be in the future
-      S.sessions.push({ start: start, end: end, mode: mode, apps: S.modes[mode].apps.slice(), demo: true });
+      S.sessions.push({ start: start, end: end, mode: mode, apps: shutApps(S.modes[mode]), demo: true });
     });
     [[6, 10.2], [5, 15.1], [4, 23.3], [3, 20.4], [1, 23.1], [1, 10.6], [0, 9.5]].forEach(([ago, h]) => {
       const d = new Date(now - ago * DAY); d.setHours(Math.floor(h), Math.round((h % 1) * 60), 0, 0);
@@ -2159,6 +2290,73 @@ function bindApp(tab) {
     b.setAttribute("aria-pressed", i < 0); save(); render();
   });
 
+  // ----- mode editor -----
+  const frozen = () => { if (S.lock && S.strict) { toast("Strict mode is on, so modes are frozen until you unlock."); return true; } return false; };
+  const refocus = sel => setTimeout(() => { const el = $(sel); if (el) el.focus({ preventScroll: true }); }, 0);
+  $$("[data-editmode]").forEach(b => b.onclick = () => {
+    const k = b.dataset.editmode; editingMode = editingMode === k ? null : k; render();
+    refocus(`[data-editmode="${k}"]`);
+  });
+  $$(".opt[data-kind]").forEach(b => b.onclick = () => {
+    if (frozen()) return;
+    const m = S.modes[b.dataset.mode], v = b.dataset.kind;
+    if (m.kind === v) return;
+    // switching between block and allow lists keeps the picks meaningful: start allow lists empty
+    if (v === "allow" && m.kind !== "allow") m.apps = [];
+    if (v === "block" && m.kind !== "block") m.apps = DEFAULT_PICKS.slice();
+    m.kind = v; save(); render(); refocus(`.opt[data-kind="${v}"][data-mode="${b.dataset.mode}"]`);
+  });
+  $$("[data-modename]").forEach(inp => {
+    const commit = () => {
+      if (frozen()) return;
+      const m = S.modes[inp.dataset.modename], v = inp.value.trim().slice(0, 24);
+      if (!v) { inp.value = m.name; return; }
+      if (v !== m.name) { m.name = v; save(); const h = $("#mh-" + inp.dataset.modename); if (h) h.textContent = v; }
+    };
+    inp.onchange = commit; inp.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); inp.blur(); } };
+  });
+  $$("form[data-siteform]").forEach(f => f.onsubmit = e => {
+    e.preventDefault(); if (frozen()) return;
+    const k = f.dataset.siteform, m = S.modes[k], inp = $("input", f), err = $("#mse-" + k);
+    const s = cleanSite(inp.value);
+    if (!s) { err.textContent = "That doesn't look like a website. Try something like youtube.com"; return inp.focus(); }
+    if (m.sites.includes(s)) { err.textContent = s + " is already on the list."; return; }
+    if (m.sites.length >= 100) { err.textContent = "That's the limit of 100 websites for one mode."; return; }
+    m.sites.push(s); save(); render(); refocus("#ms-" + k);
+  });
+  $$("[data-delsite]").forEach(b => b.onclick = () => {
+    if (frozen()) return;
+    const m = S.modes[b.dataset.mode]; m.sites = m.sites.filter(s => s !== b.dataset.delsite); save(); render(); refocus("#ms-" + b.dataset.mode);
+  });
+  $$("[data-silence]").forEach(b => b.onclick = () => {
+    if (frozen()) return;
+    const m = S.modes[b.dataset.silence]; m.silence = !m.silence; save(); render(); refocus(`[data-silence="${b.dataset.silence}"]`);
+  });
+  $$("[data-delmode]").forEach(b => b.onclick = () => {
+    if (frozen()) return;
+    const k = b.dataset.delmode;
+    if (S.lock && S.lock.mode === k) return toast("That mode is running right now. Unlock first.");
+    overlay(`<h2>Delete ${esc(modeName(k))}?</h2><p class="muted">Its app list and websites go. Your past sessions in it stay in Insights.${S.schedule.some(r => r.mode === k) ? " Schedules that use it will switch to " + esc(modeName(modeKeys().find(x => x !== k))) + "." : ""}</p>
+      <div class="row" style="margin-top:22px"><button class="btn btn-ghost" style="flex:1" id="dm-no">Keep it</button><button class="btn btn-lime" style="flex:1" id="dm-yes">Delete</button></div>`);
+    $("#dm-no").onclick = () => closeOverlay();
+    $("#dm-yes").onclick = () => {
+      const fallback = modeKeys().find(x => x !== k);
+      delete S.modes[k];
+      S.schedule.forEach(r => { if (r.mode === k) r.mode = fallback; });
+      if (S.activeMode === k) S.activeMode = fallback;
+      editingMode = null; save(); closeOverlay(); render(); toast("Mode deleted.");
+    };
+  });
+  const mn = $("#mode-new"); if (mn) mn.onclick = () => {
+    if (frozen() || modeKeys().length >= MAX_MODES) return;
+    const k = "m" + Date.now().toString(36);
+    S.modes[k] = { name: "New mode", note: "", kind: "block", apps: DEFAULT_PICKS.slice(), sites: [], silence: true };
+    editingMode = k; save(); render();
+    setTimeout(() => { const i = $("#mn-" + k); if (i) { i.focus(); i.select(); i.scrollIntoView({ block: "center" }); } }, 30);
+  };
+  const clockBtn = $("#h-timer"); if (clockBtn) clockBtn.onclick = () => { S.hideTimer = !S.hideTimer; save(); render(); refocus("#h-timer"); };
+  const lockBtn = $("#h-lock"); if (lockBtn) lockBtn.onclick = tapOverlay;
+
   const strict = $("#strict"); if (strict) strict.onclick = () => {
     if (S.lock && S.strict) return toast("You can't turn strict mode off mid-session. That's rather the point.");
     S.strict = !S.strict; save(); render(); toast("Strict mode " + (S.strict ? "on" : "off"));
@@ -2176,6 +2374,13 @@ function bindApp(tab) {
     if (S.schedule.length === 1 && "Notification" in window && Notification.permission === "default") Promise.resolve(Notification.requestPermission()).catch(() => {});
   };
   $$("[data-delrule]").forEach(b => b.onclick = () => { S.schedule.splice(+b.dataset.delrule, 1); save(); render(); });
+  $$("[data-preset]").forEach(b => b.onclick = () => {
+    const p = SCHEDULE_PRESETS[+b.dataset.preset];
+    S.schedule.push({ from: p.from, to: p.to, mode: presetMode(p), days: p.days.slice() });
+    addXP(15); save(); render(); toast(p.label + " added.");
+    if (S.schedule.length === 1 && "Notification" in window && Notification.permission === "default") Promise.resolve(Notification.requestPermission()).catch(() => {});
+    checkSchedule();
+  });
 
   const dm = $("#demo"); if (dm) dm.onclick = toggleDemo;
   const pr = $("#p-repair"); if (pr) pr.onclick = () => {
@@ -2189,10 +2394,35 @@ function bindApp(tab) {
       ripple();
       setTimeout(() => {
         S.puck = { id: id, method: method, name: S.puck ? S.puck.name : "Desk puck", paired: Date.now() };
+        if (method === "demo") S.morePucks = [];   // extra pucks only make sense alongside a real one
         save(); closeOverlay(); render(); toast(method === "demo" ? "Demo puck paired." : "New puck paired.");
       }, 420);
     } });
   };
+  const ap = $("#p-addpuck"); if (ap) ap.onclick = () => {
+    if (S.lock) return toast("Unlock first, then add a puck.");
+    const names = ["Bedroom puck", "Office puck", "Kitchen puck", "Spare puck"];
+    const name = names.find(n => !allPucks().some(p => p.name === n)) || "Another puck";
+    overlay(`<h2>Add another puck</h2><p class="muted">Tap your phone on the new puck. Your other pucks keep working too.</p>
+      <div style="margin:18px 0 6px">${puckBlock(false, "Waiting for your puck…")}</div>
+      ${readerPanel()}
+      <div class="q"><label for="ap-name">Name it</label><input id="ap-name" type="text" maxlength="24" value="${esc(name)}"></div>`);
+    mountPuck(".ovbg #puck", { onTap: demoTap });
+    listenForPuck({ pairing: true, adding: true, onPuck: (id, method) => {
+      const nm = ($("#ap-name").value.trim() || name).slice(0, 24);
+      ripple();
+      setTimeout(() => {
+        S.morePucks = S.morePucks || [];
+        S.morePucks.push({ id: id, method: method, name: nm, paired: Date.now() });
+        save(); closeOverlay(); render(); toast(nm + " added.");
+      }, 420);
+    } });
+  };
+  $$("[data-delpuck]").forEach(b => b.onclick = () => {
+    if (S.lock) return toast("Unlock first, then remove a puck.");
+    const p = S.morePucks[+b.dataset.delpuck];
+    S.morePucks.splice(+b.dataset.delpuck, 1); save(); render(); toast(p.name + " removed.");
+  });
   const nt = $("#p-notify"); if (nt) nt.onclick = async () => {
     if (!("Notification" in window)) return;
     if (Notification.permission === "denied") return toast("Notifications are blocked. Allow them for this site in your browser settings.");

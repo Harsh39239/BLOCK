@@ -22,6 +22,19 @@
   - **QR code** on the puck's base, using the camera. Works on Android Chrome.
   - **Demo puck**: click it on screen. This is for desktops and people without a puck yet. Once a real puck is paired, the demo click stops working.
 - **Sessions, streaks, stats, modes, strict mode, emergency unlocks** are stored on the device.
+- **Two-step setup.** Pick apps (popular ones pre-picked; name is optional), then pair a puck.
+- **Modes, up to 10, fully editable:**
+  - "Block these apps", "Allow only these" or "Block everything" (the essentials always stay open);
+  - browsers in the app list, plus blocked websites;
+  - a switch to silence notifications from blocked apps.
+
+  Websites and notifications take effect in the Android app.
+- **Locking:**
+  - Pick a length: until you tap, 25 min, 1 hour or 2 hours. Timed sessions unlock on their own.
+  - "Hold to lock anyway" when the puck isn't nearby. Unlocking still needs a puck.
+  - Option to hide the session clock.
+- **More than one puck** per phone (desk, bedroom...). Any paired puck unlocks; anyone else's is refused. One puck can be shared by a household.
+- **Schedule quick-adds:** Bedtime, Study evenings and Work day in one tap.
 - **Accounts and sync** (Profile → Sync across devices): passwordless email sign-in link. Each person's data sits in one row of `user_state` that only they can read or write. Two devices are merged, never overwritten.
 - **Insights:**
   - time won back (an estimate from the "hours a day" baseline, which can be changed in Profile);
