@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#121311"/>
+  <rect x="96" y="96" width="320" height="320" rx="96" fill="#c6ff3d"/>
+  <rect x="136" y="136" width="240" height="240" rx="70" fill="none" stroke="#10140a" stroke-opacity=".18" stroke-width="6"/>
+  <text x="256" y="276" text-anchor="middle" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="58" letter-spacing="10" fill="#10140a">BLOCK</text>
+</svg>

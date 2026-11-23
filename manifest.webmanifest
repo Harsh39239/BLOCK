@@ -1,0 +1,23 @@
+{
+  "name": "BLOCK — Tap to stop",
+  "short_name": "BLOCK",
+  "description": "A physical off switch for distracting apps. Tap the puck to lock, walk back and tap again to unlock.",
+  "start_url": "block.html#app/home",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#121311",
+  "theme_color": "#121311",
+  "lang": "en-IN",
+  "categories": ["productivity", "health", "lifestyle"],
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Lock now", "url": "block.html#app/home", "icons": [{ "src": "icon-192.png", "sizes": "192x192" }] },
+    { "name": "Schedule", "url": "block.html#app/schedule", "icons": [{ "src": "icon-192.png", "sizes": "192x192" }] }
+  ]
+}
