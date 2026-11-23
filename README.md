@@ -1,5 +1,7 @@
 # BLOCK website and web app
 
+**Live:** https://harsh39239.github.io/BLOCK/ (GitHub Pages, deploys automatically from `main`)
+
 | File | What it is |
 |---|---|
 | `block.html` | The whole site: landing page, setup, and the app (Home, Modes, Schedule, Insights, Profile). |
